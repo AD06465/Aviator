@@ -29,9 +29,34 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
     new Date(b.CREATED_DTTM).getTime() - new Date(a.CREATED_DTTM).getTime()
   );
 
+  // Calculate actual completion statistics
+  const getTaskStatistics = () => {
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'completed').length;
+    const aviatorCompletedTasks = processingStatus?.completedTasks || 0;
+    const failedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'failed').length;
+    const readyTasks = tasks.filter(t => ['ready', 'assigned', 'created'].includes(t.TASK_STATUS.toLowerCase())).length;
+    
+    return {
+      totalTasks,
+      completedTasks,
+      aviatorCompletedTasks,
+      failedTasks,
+      readyTasks,
+      completionPercentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+    };
+  };
+
+  const taskStats = getTaskStatistics();
+
+  // Check for order completion
+  const isOrderCompleted = () => {
+    const activationCompleteTask = tasks.find(t => t.TASK_NAME === 'Activation Complete');
+    return activationCompleteTask && activationCompleteTask.TASK_STATUS.toLowerCase() === 'completed';
+  };
+
   const getProgressPercentage = () => {
-    if (!processingStatus || processingStatus.totalTasks === 0) return 0;
-    return Math.round((processingStatus.completedTasks / processingStatus.totalTasks) * 100);
+    return taskStats.completionPercentage;
   };
 
   const fetchFailureDetails = async (taskId: number) => {
@@ -116,6 +141,25 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
 
   return (
     <div className="bg-white rounded-xl shadow-lg">
+      {/* Order Completion Message */}
+      {isOrderCompleted() && (
+        <div className="bg-gradient-to-r from-green-500 to-emerald-600 text-white p-6 rounded-t-xl">
+          <div className="flex items-center space-x-3">
+            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-xl font-bold">🎉 Order Completed Successfully!</h3>
+              <p className="text-green-100 mt-1">
+                Activation Complete task finished. Your order has been fully processed and activation events have been sent to upstream systems.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="p-6 border-b border-gray-200">
         <div className="flex items-center justify-between">
@@ -124,49 +168,136 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
             <p className="text-gray-600 mt-1">Real-time task processing status</p>
           </div>
           
-          {processingStatus && (
-            <div className="flex items-center space-x-4">
-              {processingStatus.isProcessing && (
-                <div className="flex items-center space-x-2 text-blue-600">
-                  <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                  <span className="text-sm font-medium">Processing...</span>
-                </div>
-              )}
-              
-              <div className="text-right">
-                <div className="text-2xl font-bold text-gray-900">
-                  {processingStatus.completedTasks}/{processingStatus.totalTasks}
-                </div>
-                <div className="text-sm text-gray-500">Tasks Completed</div>
+          <div className="flex items-center space-x-6">
+            {processingStatus && processingStatus.isProcessing && (
+              <div className="flex items-center space-x-2 text-blue-600">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                <span className="text-sm font-medium">Processing...</span>
               </div>
+            )}
+            
+            {/* Overall Progress */}
+            <div className="text-right">
+              <div className="text-2xl font-bold text-gray-900">
+                {taskStats.completedTasks}/{taskStats.totalTasks}
+              </div>
+              <div className="text-sm text-gray-500">Total Tasks Completed</div>
             </div>
-          )}
+
+            {/* AVIATOR Completed Tasks */}
+            {taskStats.aviatorCompletedTasks > 0 && (
+              <div className="text-right">
+                <div className="text-xl font-bold text-blue-600">
+                  {taskStats.aviatorCompletedTasks}
+                </div>
+                <div className="text-xs text-blue-500">By AVIATOR</div>
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Progress Bar */}
-        {processingStatus && processingStatus.totalTasks > 0 && (
+        {taskStats.totalTasks > 0 && (
           <div className="mt-4">
             <div className="flex justify-between text-sm text-gray-600 mb-2">
-              <span>Progress</span>
-              <span>{getProgressPercentage()}%</span>
+              <span>Overall Progress</span>
+              <span className={`${!isOrderCompleted() && taskStats.completionPercentage > 0 ? 'progress-animate' : ''}`}>
+                {taskStats.completionPercentage}% ({taskStats.completedTasks}/{taskStats.totalTasks})
+              </span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
+            <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative shadow-inner">
               <div
-                className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${getProgressPercentage()}%` }}
-              ></div>
+                className={`h-3 rounded-full transition-all duration-1000 ease-out relative ${
+                  isOrderCompleted() 
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-600 shadow-lg shadow-green-500/50'
+                    : 'bg-gradient-to-r from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30'
+                }`}
+                style={{ width: `${taskStats.completionPercentage}%` }}
+              >
+                {/* Animated shine effect */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white via-transparent opacity-20 animate-pulse"></div>
+                
+                {/* Moving highlight for active progress */}
+                {!isOrderCompleted() && taskStats.completionPercentage > 0 && taskStats.completionPercentage < 100 && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white opacity-30 animate-[shimmer_2s_ease-in-out_infinite]"></div>
+                )}
+                
+                {/* Completion celebration effect */}
+                {isOrderCompleted() && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-40 animate-[celebrate_3s_ease-in-out_infinite]"></div>
+                )}
+              </div>
+            </div>
+            
+            {/* Task Statistics Summary */}
+            <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+              <div className="flex items-center space-x-4">
+                <span className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>Completed: {taskStats.completedTasks}</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  <span>By AVIATOR: {taskStats.aviatorCompletedTasks}</span>
+                </span>
+                {taskStats.failedTasks > 0 && (
+                  <span className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                    <span>Failed: {taskStats.failedTasks}</span>
+                  </span>
+                )}
+                {taskStats.readyTasks > 0 && (
+                  <span className="flex items-center space-x-1">
+                    <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                    <span>Ready: {taskStats.readyTasks}</span>
+                  </span>
+                )}
+              </div>
+              {isOrderCompleted() && (
+                <span className="text-green-600 font-medium">✅ Order Complete</span>
+              )}
             </div>
           </div>
         )}
         
         {/* Current Task */}
-        {processingStatus?.currentTask && (
+        {processingStatus?.currentTask && !isOrderCompleted() && (
           <div className="mt-4 p-3 bg-blue-50 rounded-lg">
             <div className="flex items-center space-x-2">
               <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-medium text-blue-700">
                 Currently Processing: {processingStatus.currentTask}
               </span>
+            </div>
+          </div>
+        )}
+
+        {/* Order Completion Summary */}
+        {isOrderCompleted() && (
+          <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h4 className="text-lg font-semibold text-green-800 mb-2">Order Processing Complete</h4>
+                <div className="text-sm text-green-700 space-y-1">
+                  <p>✅ All critical tasks have been completed successfully</p>
+                  <p>✅ Service activation has been processed and confirmed</p>
+                  <p>✅ Activation events have been sent to upstream systems</p>
+                  <p>✅ Order is now closed in FlightDeck and Autopilot</p>
+                </div>
+                {taskStats.aviatorCompletedTasks > 0 && (
+                  <div className="mt-3 p-2 bg-white bg-opacity-50 rounded border border-green-300">
+                    <p className="text-sm text-green-800">
+                      <strong>AVIATOR Contribution:</strong> Automated completion of {taskStats.aviatorCompletedTasks} task{taskStats.aviatorCompletedTasks !== 1 ? 's' : ''}, 
+                      saving significant manual effort and reducing processing time.
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

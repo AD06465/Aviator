@@ -106,6 +106,26 @@ export interface Workgroup {
 // Type for workgroup API response which can be either objects or strings
 export type WorkgroupResponse = Workgroup[] | string[];
 
+export interface UserWorkgroup {
+  id: string;
+  name: string;
+  description?: string;
+  roles: Array<{
+    workgroupName: string;
+    workgroupRoleName: string;
+  }>;
+}
+
+export interface UserProfile {
+  id: string;
+  cuid: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  workgroupsList: UserWorkgroup[];
+}
+
 export interface OrderForm {
   orderNumber: string;
   productName: string;

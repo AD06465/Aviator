@@ -5,6 +5,7 @@ export const defaultTaskConfig: TaskManagementConfig = {
     'Confirm/Schedule Activation',
     'Service Validate Field',
     'Service Validate - UNI (Tester)',
+    'CM-Test and Tag',
     'Service Validate Ethernet',
     'Send Completion Details',
     'Verify or Assign Appropriate Device',
@@ -22,6 +23,9 @@ export const defaultTaskConfig: TaskManagementConfig = {
   taskFieldMappings: {
     'Service Validate - UNI (Tester)': {
       'Demarc_Information*': 'Test',
+    },
+    'CM-Test and Tag': {
+      'Comments': 'Automated completion via AVIATOR',
     },
     'LOA Designate Tid and Port': {
       'TID*': '{{preferredDevice}}',
@@ -65,6 +69,7 @@ export const taskPriorityOrder = [
   'Confirm/Schedule Activation',
   'Service Validate Field',
   'Service Validate - UNI (Tester)',
+  'CM-Test and Tag',
   'Service Validate Ethernet',
   'Send Completion Details',
 ];
@@ -157,6 +162,24 @@ export const calculateDelayForTask = (taskName: string, taskIndex: number): numb
   // 15 minutes delay between Service Validate - UNI (Tester) tasks
   if (taskName === 'Service Validate - UNI (Tester)' && taskIndex > 0) {
     return 15 * 60 * 1000; // 15 minutes in milliseconds
+  }
+  
+  // Delays after validation tasks to allow system updates
+  if (taskName === 'Service Validate Field') {
+    return 1 * 60 * 1000; // 1 minute in milliseconds
+  }
+  
+  if (taskName === 'Service Validate - UNI (Tester)') {
+    return 2 * 60 * 1000; // 2 minutes in milliseconds
+  }
+  
+  if (taskName === 'Service Validate Ethernet') {
+    return 1 * 60 * 1000; // 1 minute in milliseconds
+  }
+  
+  // 1 minute delay after completing CM-Test and Tag to allow system updates
+  if (taskName === 'CM-Test and Tag') {
+    return 1 * 60 * 1000; // 1 minute in milliseconds
   }
   
   // Default delay between API calls

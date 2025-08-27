@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { OrderForm, Workgroup, WorkgroupResponse } from '../types';
+import { OrderForm, Workgroup, WorkgroupResponse, UserWorkgroup } from '../types';
 import { workflowTypes, defaultDevices } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
 
@@ -21,12 +21,15 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
   });
 
   const [workgroups, setWorkgroups] = useState<WorkgroupResponse>([]);
-  const [filteredWorkgroups, setFilteredWorkgroups] = useState<WorkgroupResponse>([]);
+  const [filteredWorkgroups, setFilteredWorkgroups] = useState<(string | Workgroup)[]>([]);
   const [workgroupSearch, setWorkgroupSearch] = useState('');
   const [devices, setDevices] = useState<string[]>(defaultDevices);
   const [newDevice, setNewDevice] = useState('');
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [isLoadingWorkgroups, setIsLoadingWorkgroups] = useState(false);
+  const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(false);
+  const [userWorkgroups, setUserWorkgroups] = useState<UserWorkgroup[]>([]);
+  const [userProfileError, setUserProfileError] = useState<string | null>(null);
   const [userNameConfirmed, setUserNameConfirmed] = useState(false);
   const [confirmedUserName, setConfirmedUserName] = useState('');
   const [isWorkgroupDropdownOpen, setIsWorkgroupDropdownOpen] = useState(false);
@@ -34,14 +37,63 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
 
   const environments = flightDeckApiService.getEnvironments();
 
-  // Auto-load workgroups when username is 7 characters or confirmed
+  // Auto-load user profile and workgroups when username is 7 characters or confirmed
   useEffect(() => {
     if (formData.userName && 
         ((formData.userName.length === 7 && !userNameConfirmed) || 
          (userNameConfirmed && confirmedUserName === formData.userName))) {
-      loadWorkgroups();
+      loadUserProfile();
     }
   }, [formData.userName, userNameConfirmed, confirmedUserName]);
+
+  const loadUserProfile = async () => {
+    if (!formData.userName || formData.userName.length < 7) return;
+
+    setIsLoadingUserProfile(true);
+    setUserProfileError(null);
+    
+    try {
+      // Set environment and username for API service
+      flightDeckApiService.setEnvironment(formData.environment);
+      flightDeckApiService.setUserName(formData.userName);
+
+      const result = await flightDeckApiService.getUserProfile(formData.userName);
+      
+      if (result.success && result.data) {
+        const userData = result.data;
+        
+        // Extract user workgroups
+        if (userData.workgroupsList && Array.isArray(userData.workgroupsList)) {
+          setUserWorkgroups(userData.workgroupsList);
+          setUserProfileError(null);
+          
+          // Set username as confirmed
+          if (!userNameConfirmed) {
+            setUserNameConfirmed(true);
+            setConfirmedUserName(formData.userName);
+          }
+          
+          console.log(`Found ${userData.workgroupsList.length} workgroups for user ${formData.userName}`);
+        } else {
+          setUserWorkgroups([]);
+          setUserProfileError('No workgroups found for this user');
+        }
+      } else {
+        setUserWorkgroups([]);
+        setUserProfileError(result.error || 'Failed to load user profile');
+        // Fallback to loading all workgroups
+        loadWorkgroups();
+      }
+    } catch (error) {
+      console.error('Error loading user profile:', error);
+      setUserWorkgroups([]);
+      setUserProfileError('Failed to load user profile');
+      // Fallback to loading all workgroups
+      loadWorkgroups();
+    } finally {
+      setIsLoadingUserProfile(false);
+    }
+  };
 
   // Reload workgroups when environment changes (if username is confirmed)
   useEffect(() => {
@@ -80,8 +132,12 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
   }, [isWorkgroupDropdownOpen]);
 
   useEffect(() => {
+    // Use user workgroups when available, fallback to all workgroups
+    const workgroupsToFilter = userWorkgroups.length > 0 ? 
+      userWorkgroups.map(uw => ({ workgroupId: uw.id, workgroupName: uw.name })) : workgroups;
+
     if (workgroupSearch) {
-      const filtered = workgroups.filter(wg => {
+      const filtered = workgroupsToFilter.filter(wg => {
         const workgroupName = getWorkgroupDisplayName(wg);
         const workgroupId = getWorkgroupId(wg);
         
@@ -96,13 +152,13 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
       setFilteredWorkgroups(filtered);
     } else {
       // Filter out empty workgroup names when showing all
-      const filtered = workgroups.filter(wg => {
+      const filtered = workgroupsToFilter.filter(wg => {
         const workgroupName = getWorkgroupDisplayName(wg);
         return workgroupName && workgroupName.trim() !== '' && workgroupName !== '""';
       });
       setFilteredWorkgroups(filtered);
     }
-  }, [workgroupSearch, workgroups]);
+  }, [workgroupSearch, workgroups, userWorkgroups]);
 
   const loadWorkgroups = async () => {
     if (!formData.userName) return;
@@ -206,7 +262,7 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
       formData.workgroup &&
       userNameConfirmed &&
       confirmedUserName === formData.userName &&
-      workgroups.length > 0
+      filteredWorkgroups.length > 0
     );
   };
 
@@ -239,14 +295,21 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Product Name *
             </label>
-            <input
-              type="text"
+            <select
               value={formData.productName}
               onChange={(e) => handleInputChange('productName', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter product name"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 hover:border-gray-400 focus:scale-[1.02]"
               disabled={isProcessing}
-            />
+              required
+            >
+              <option value="">Select product type...</option>
+              <option value="DIA">DIA</option>
+              <option value="ELINE">ELINE</option>
+              <option value="ELAN">ELAN</option>
+              <option value="ELYNK">ELYNK</option>
+              <option value="IPVPN">IPVPN</option>
+              <option value="UNI">UNI</option>
+            </select>
           </div>
 
           {/* Workflow Name */}
@@ -351,11 +414,37 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>Username confirmed • Workgroups loaded</span>
+                <span>Username confirmed</span>
               </div>
             )}
             
-            {formData.userName.length === 7 && !userNameConfirmed && !isLoadingWorkgroups && (
+            {/* User Profile Status */}
+            {isLoadingUserProfile && (
+              <div className="mt-2 flex items-center space-x-2 text-sm text-blue-600">
+                <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                <span>Loading your workgroup profile...</span>
+              </div>
+            )}
+            
+            {userWorkgroups.length > 0 && !isLoadingUserProfile && (
+              <div className="mt-2 flex items-center space-x-2 text-sm text-green-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Found {userWorkgroups.length} workgroup{userWorkgroups.length !== 1 ? 's' : ''} for your profile</span>
+              </div>
+            )}
+            
+            {userProfileError && (
+              <div className="mt-2 flex items-center space-x-2 text-sm text-orange-600">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                <span>{userProfileError} • Using all available workgroups</span>
+              </div>
+            )}
+            
+            {formData.userName.length === 7 && !userNameConfirmed && !isLoadingWorkgroups && !isLoadingUserProfile && (
               <div className="mt-2 text-sm text-blue-600">
                 ✨ Auto-loading workgroups for 7-character username
               </div>
@@ -404,21 +493,29 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
                     }}
                     onFocus={() => setIsWorkgroupDropdownOpen(true)}
                     className="w-full px-4 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    placeholder={workgroups.length > 0 ? "Search or click to select workgroup..." : "No workgroups found"}
-                    disabled={isProcessing || isLoadingWorkgroups || workgroups.length === 0}
+                    placeholder={
+                      isLoadingUserProfile 
+                        ? "Loading your profile..." 
+                        : userWorkgroups.length > 0 
+                          ? `Search your ${userWorkgroups.length} workgroup${userWorkgroups.length !== 1 ? 's' : ''} or click to select...`
+                          : filteredWorkgroups.length > 0 
+                            ? `Search ${filteredWorkgroups.length} workgroup${filteredWorkgroups.length !== 1 ? 's' : ''} or click to select...`
+                            : "No workgroups found"
+                    }
+                    disabled={isProcessing || isLoadingWorkgroups || isLoadingUserProfile || filteredWorkgroups.length === 0}
                   />
                   
                   {/* Right side icons */}
                   <div className="absolute right-3 top-3 flex items-center space-x-2">
-                    {isLoadingWorkgroups && (
+                    {(isLoadingWorkgroups || isLoadingUserProfile) && (
                       <div className="animate-spin h-5 w-5 border-2 border-blue-500 border-t-transparent rounded-full"></div>
                     )}
-                    {workgroups.length === 0 && !isLoadingWorkgroups && userNameConfirmed && (
+                    {filteredWorkgroups.length === 0 && !isLoadingWorkgroups && !isLoadingUserProfile && userNameConfirmed && (
                       <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
                       </svg>
                     )}
-                    {workgroups.length > 0 && !isLoadingWorkgroups && (
+                    {filteredWorkgroups.length > 0 && !isLoadingWorkgroups && !isLoadingUserProfile && (
                       <button
                         type="button"
                         onClick={() => setIsWorkgroupDropdownOpen(!isWorkgroupDropdownOpen)}
@@ -438,7 +535,12 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
                     {/* Header */}
                     <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                       <span className="text-sm font-medium text-gray-700">
-                        {filteredWorkgroups.length} workgroup{filteredWorkgroups.length !== 1 ? 's' : ''} available
+                        {userWorkgroups.length > 0 
+                          ? `Your ${filteredWorkgroups.length} workgroup${filteredWorkgroups.length !== 1 ? 's' : ''}`
+                          : `${filteredWorkgroups.length} workgroup${filteredWorkgroups.length !== 1 ? 's' : ''} available`}
+                        {userProfileError && (
+                          <span className="text-xs text-orange-600 ml-2">(Default list)</span>
+                        )}
                       </span>
                       <button
                         type="button"
@@ -514,7 +616,7 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
             )}
             
             {/* Status Messages */}
-            {userNameConfirmed && workgroups.length === 0 && !isLoadingWorkgroups && (
+            {userNameConfirmed && filteredWorkgroups.length === 0 && !isLoadingWorkgroups && !isLoadingUserProfile && (
               <div className="mt-2 text-sm text-red-600 flex items-center space-x-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 18.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -523,12 +625,16 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
               </div>
             )}
             
-            {userNameConfirmed && workgroups.length > 0 && !formData.workgroup && (
+            {userNameConfirmed && filteredWorkgroups.length > 0 && !formData.workgroup && !isLoadingWorkgroups && !isLoadingUserProfile && (
               <div className="mt-2 text-sm text-green-600 flex items-center space-x-2">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>{workgroups.length} workgroup{workgroups.length !== 1 ? 's' : ''} available - search or click to select</span>
+                <span>
+                  {userWorkgroups.length > 0 
+                    ? `Your ${filteredWorkgroups.length} workgroup${filteredWorkgroups.length !== 1 ? 's' : ''} loaded - search or click to select`
+                    : `${filteredWorkgroups.length} workgroup${filteredWorkgroups.length !== 1 ? 's' : ''} available - search or click to select`}
+                </span>
               </div>
             )}
           </div>

@@ -75,6 +75,22 @@ class FlightDeckApiService {
     this.currentUserName = userName;
   }
 
+  async getUserProfile(cuid: string): Promise<ApiResponse<any>> {
+    try {
+      const response = await this.api.get(`/RestService/Enterprise/v2/Work/resource?cuid=${cuid}&include=a,r,p,wg,jd`);
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error: any) {
+      console.error('getUserProfile error:', error);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to get user profile'
+      };
+    }
+  }
+
   async searchTasks(orderNumber: string): Promise<ApiResponse<TaskSearchResponse>> {
     try {
       const payload = {
