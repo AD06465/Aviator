@@ -22,13 +22,13 @@ export const defaultTaskConfig: TaskManagementConfig = {
   ],
   taskFieldMappings: {
     'Service Validate - UNI (Tester)': {
-      'Demarc_Information*': 'Test',
+      'Demarc_Information': 'Test',
     },
     'CM-Test and Tag': {
       'Comments': 'Automated completion via AVIATOR',
     },
     'LOA Designate Tid and Port': {
-      'TID*': '{{preferredDevice}}',
+      'TID': '{{preferredDevice}}',
       'Port (eg: GigabitEthernet0/0/23)': '{{preferredPort}}',
       'Demarc Location': 'TEST',
     },
@@ -36,9 +36,9 @@ export const defaultTaskConfig: TaskManagementConfig = {
       'Demarc Location': 'TEST',
     },
     'Verify or Assign Appropriate Device': {
-      'Fallout Action': '{{workflowBasedValue}}', // 'Enter Port data' for Monarch
-      'Device: *': '{{preferredDevice}}',
-      'Port: *': '{{preferredPort}}',
+      'Fallout Action': '{{workflowBasedValue}}', // 'Enter Port data' for Monarch, 'Create Cap Jeop' for Colorless
+      'Device': '{{preferredDevice}}',
+      'Port': '{{preferredPort}}',
     },
   },
 };
@@ -94,30 +94,41 @@ export const getTaskFieldValue = (
   orderForm: any
 ): string => {
   const mapping = config.taskFieldMappings[taskName];
-  if (!mapping || !mapping[fieldName]) {
+  if (!mapping) {
     return '';
   }
 
-  let value = mapping[fieldName];
+  // Direct field name match
+  if (mapping[fieldName]) {
+    let value = mapping[fieldName];
 
-  // Replace placeholders with actual values
-  if (value === '{{preferredDevice}}') {
-    return orderForm.preferredDevice || '';
-  }
-  
-  if (value === '{{preferredPort}}') {
-    return orderForm.preferredPort || '';
-  }
-
-  if (value === '{{workflowBasedValue}}') {
-    // For Verify or Assign Appropriate Device task
-    if (fieldName === 'Fallout Action' && orderForm.workflowName?.toLowerCase().includes('monarch')) {
-      return 'Enter Port data';
+    // Replace placeholders with actual values
+    if (value === '{{preferredDevice}}') {
+      return orderForm.preferredDevice || '';
     }
-    return 'Create Cap Jeop'; // Default value
+    
+    if (value === '{{preferredPort}}') {
+      return orderForm.preferredPort || '';
+    }
+
+    if (value === '{{workflowBasedValue}}') {
+      // For Verify or Assign Appropriate Device task - Fallout Action field
+      if (fieldName === 'Fallout Action') {
+        if (orderForm.workflowName?.toLowerCase().includes('monarch')) {
+          return 'Enter Port data';
+        }
+        if (orderForm.workflowName?.toLowerCase().includes('colorless')) {
+          return 'Create Cap Jeop';
+        }
+        return 'Create Cap Jeop'; // Default value
+      }
+      return 'Create Cap Jeop'; // Default value for other fields
+    }
+
+    return value;
   }
 
-  return value;
+  return '';
 };
 
 export const formatTaskStatus = (status: string): string => {

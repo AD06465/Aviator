@@ -167,3 +167,23 @@ export interface ProcessingStatus {
   failedTasks: Task[];
   lastUpdate: Date;
 }
+
+export interface TaskField {
+  name: string;
+  value: string;
+  required: boolean;
+  editable: boolean;
+  label: string;
+  type?: string;
+}
+
+export interface MandatoryFieldResult {
+  hasMissingFields: boolean;
+  missingFields: TaskField[];
+  allMandatoryFields: TaskField[];
+}
+
+export interface UserFieldInput {
+  fieldName: string;
+  value: string;
+}
