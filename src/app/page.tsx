@@ -5,6 +5,8 @@ import Layout from '../components/Layout';
 import OrderForm from '../components/OrderForm';
 import TaskMonitor from '../components/TaskMonitor';
 import TaskConfigManager from '../components/TaskConfigManager';
+import TaskConfigTable from '../components/TaskConfigTable';
+import BackupManager from '../components/BackupManager';
 import Toast from '../components/Toast';
 import { OrderForm as OrderFormType, Task, TaskManagementConfig, ProcessingStatus } from '../types';
 import { defaultTaskConfig } from '../lib/taskConfig';
@@ -17,7 +19,7 @@ export default function HomePage() {
   const [taskConfig, setTaskConfig] = useState<TaskManagementConfig>(defaultTaskConfig);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
   const [taskProcessor, setTaskProcessor] = useState<TaskProcessor | null>(null);
-  const [activeTab, setActiveTab] = useState<'monitor' | 'config'>('monitor');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'config' | 'table' | 'backup'>('table');
   const [isSearchingTasks, setIsSearchingTasks] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lastSearchTime, setLastSearchTime] = useState<Date | null>(null);
@@ -42,6 +44,9 @@ export default function HomePage() {
     
     if (taskProcessor) {
       try {
+        // Switch to monitor tab when automation starts
+        setActiveTab('monitor');
+        
         // Start monitoring tasks (includes initial search with loading state)
         await startTaskMonitoring(orderForm);
         
@@ -306,10 +311,30 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* Tabs */}
-        {(tasks.length > 0 || processingStatus) && (
-          <div className="border-b border-gray-200">
-            <nav className="flex space-x-8">
+        {/* Tabs - Always visible */}
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8">
+            <button
+              onClick={() => setActiveTab('table')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'table'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              📝 Task Configuration
+            </button>
+            <button
+              onClick={() => setActiveTab('backup')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                activeTab === 'backup'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              💾 Data Backup
+            </button>
+            {(tasks.length > 0 || processingStatus) && (
               <button
                 onClick={() => setActiveTab('monitor')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -318,8 +343,10 @@ export default function HomePage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Task Monitor
+                📊 Task Monitor
               </button>
+            )}
+            {(tasks.length > 0 || processingStatus) && (
               <button
                 onClick={() => setActiveTab('config')}
                 className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
@@ -328,11 +355,11 @@ export default function HomePage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                Task Configuration
+                ⚙️ Advanced Config
               </button>
-            </nav>
-          </div>
-        )}
+            )}
+          </nav>
+        </div>
 
         {/* Tab Content */}
         {activeTab === 'monitor' && (
@@ -344,6 +371,39 @@ export default function HomePage() {
             lastSearchTime={lastSearchTime}
             currentOrder={currentOrder}
           />
+        )}
+
+        {activeTab === 'table' && (
+          <TaskConfigTable onConfigChange={(taskConfigs) => {
+            // Convert task configs back to TaskManagementConfig format
+            const config: TaskManagementConfig = {
+              completableTasks: taskConfigs.filter(t => t.isCompletable).map(t => t.taskName),
+              retryableTasks: taskConfigs.filter(t => t.isRetryable).map(t => t.taskName),
+              taskFieldMappings: taskConfigs.reduce((acc, task) => {
+                if (task.fields.length > 0) {
+                  acc[task.taskName] = task.fields.reduce((fieldAcc, field) => {
+                    // Store the full field object for dropdown support
+                    if (field.fieldType === 'dropdown') {
+                      fieldAcc[field.fieldName] = {
+                        fieldValue: field.fieldValue,
+                        fieldType: field.fieldType,
+                        dropdownValue: field.dropdownValue || field.fieldValue
+                      };
+                    } else {
+                      fieldAcc[field.fieldName] = field.fieldValue;
+                    }
+                    return fieldAcc;
+                  }, {} as Record<string, any>);
+                }
+                return acc;
+              }, {} as Record<string, Record<string, any>>),
+            };
+            handleConfigChange(config);
+          }} />
+        )}
+
+        {activeTab === 'backup' && (
+          <BackupManager />
         )}
 
         {activeTab === 'config' && (

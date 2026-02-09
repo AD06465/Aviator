@@ -1,0 +1,80 @@
+/**
+ * Task Management Constants
+ * Centralized task names, priorities, and processing rules
+ */
+
+export const TASK_NAMES = {
+  CONFIRM_SCHEDULE_ACTIVATION: 'Confirm/Schedule Activation',
+  SERVICE_VALIDATE_FIELD: 'Service Validate Field',
+  SERVICE_VALIDATE_UNI_TESTER: 'Service Validate - UNI (Tester)',
+  CM_TEST_TAG: 'CM-Test and Tag',
+  SERVICE_VALIDATE_ETHERNET: 'Service Validate Ethernet',
+  SEND_COMPLETION_DETAILS: 'Send Completion Details',
+  VERIFY_ASSIGN_DEVICE: 'Verify or Assign Appropriate Device',
+  LOA_DESIGNATE_TID_PORT: 'LOA Designate Tid and Port',
+  LOA_VERIFICATION: 'LOA Verification',
+  BE_INSTALLATION_COMPLETION: 'BE Installation Scheduled Date: BE completion notice',
+  PERFORM_ENGINEERING_SOLUTION: 'Perform Engineering Solution',
+  GET_DETAILS_FROM_MESH: 'Get Details from MESH',
+  CREATE_UNI_IN_ASRI: 'Create Uni in ASRI',
+  ACTIVATE_UNI_IN_ACT: 'Activate UNI in ACT',
+  UPDATE_UNI_IN_ASRI: 'Update Uni in ASRI',
+  ACTIVATE_PATH_IN_ACT: 'Activate Path in ACT',
+  ACTIVATION_COMPLETE: 'Activation Complete',
+} as const;
+
+export const TASK_STATUSES = {
+  READY: 'ready',
+  ASSIGNED: 'assigned',
+  CREATED: 'created',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
+  IN_PROGRESS: 'in-progress',
+  CANCELLED: 'cancelled',
+} as const;
+
+export const TASK_PRIORITY_ORDER: readonly string[] = [
+  TASK_NAMES.BE_INSTALLATION_COMPLETION,
+  TASK_NAMES.CONFIRM_SCHEDULE_ACTIVATION,
+  TASK_NAMES.SERVICE_VALIDATE_FIELD,
+  TASK_NAMES.SERVICE_VALIDATE_UNI_TESTER,
+  TASK_NAMES.CM_TEST_TAG,
+  TASK_NAMES.SERVICE_VALIDATE_ETHERNET,
+  TASK_NAMES.SEND_COMPLETION_DETAILS,
+] as const;
+
+export const DEFAULT_COMPLETABLE_TASKS: readonly string[] = [
+  TASK_NAMES.CONFIRM_SCHEDULE_ACTIVATION,
+  TASK_NAMES.SERVICE_VALIDATE_FIELD,
+  TASK_NAMES.SERVICE_VALIDATE_UNI_TESTER,
+  TASK_NAMES.CM_TEST_TAG,
+  TASK_NAMES.SERVICE_VALIDATE_ETHERNET,
+  TASK_NAMES.SEND_COMPLETION_DETAILS,
+  TASK_NAMES.VERIFY_ASSIGN_DEVICE,
+  TASK_NAMES.LOA_DESIGNATE_TID_PORT,
+  TASK_NAMES.LOA_VERIFICATION,
+  TASK_NAMES.BE_INSTALLATION_COMPLETION,
+  TASK_NAMES.PERFORM_ENGINEERING_SOLUTION,
+] as const;
+
+export const DEFAULT_RETRYABLE_TASKS: readonly string[] = [
+  TASK_NAMES.GET_DETAILS_FROM_MESH,
+  TASK_NAMES.CREATE_UNI_IN_ASRI,
+  TASK_NAMES.ACTIVATE_UNI_IN_ACT,
+  TASK_NAMES.UPDATE_UNI_IN_ASRI,
+  TASK_NAMES.ACTIVATE_PATH_IN_ACT,
+] as const;
+
+export const PROCESSING_DELAYS = {
+  TASK_PROCESSING: 5000, // 5 seconds between tasks
+  RETRY_DELAY: 300000, // 5 minutes
+  MONITORING_INTERVAL: 30000, // 30 seconds
+  SERVICE_VALIDATE_DELAY: 900000, // 15 minutes
+} as const;
+
+export const RETRY_CONFIG = {
+  MAX_RETRIES: 3,
+  INITIAL_DELAY: 5000,
+  MAX_DELAY: 300000,
+  BACKOFF_MULTIPLIER: 2,
+} as const;

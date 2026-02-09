@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { OrderForm, Workgroup, WorkgroupResponse, UserWorkgroup } from '../types';
 import { workflowTypes, defaultDevices } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
+import DeviceManager from './DeviceManager';
 
 interface OrderFormProps {
   onSubmit: (orderForm: OrderForm) => void;
@@ -18,14 +19,16 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
     workgroup: '',
     preferredDevice: '',
     preferredPort: '',
+    portSpeed: '', // Display format
+    portSpeedMbps: undefined, // Numeric format for API
+    userCuid: '',
+    userFullName: '',
+    userEmail: '',
   });
 
   const [workgroups, setWorkgroups] = useState<WorkgroupResponse>([]);
   const [filteredWorkgroups, setFilteredWorkgroups] = useState<(string | Workgroup)[]>([]);
   const [workgroupSearch, setWorkgroupSearch] = useState('');
-  const [devices, setDevices] = useState<string[]>(defaultDevices);
-  const [newDevice, setNewDevice] = useState('');
-  const [showAddDevice, setShowAddDevice] = useState(false);
   const [isLoadingWorkgroups, setIsLoadingWorkgroups] = useState(false);
   const [isLoadingUserProfile, setIsLoadingUserProfile] = useState(false);
   const [userWorkgroups, setUserWorkgroups] = useState<UserWorkgroup[]>([]);
@@ -33,9 +36,19 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
   const [userNameConfirmed, setUserNameConfirmed] = useState(false);
   const [confirmedUserName, setConfirmedUserName] = useState('');
   const [isWorkgroupDropdownOpen, setIsWorkgroupDropdownOpen] = useState(false);
+  const [isFetchingPortSpeed, setIsFetchingPortSpeed] = useState(false);
+  const [portSpeedFetched, setPortSpeedFetched] = useState(false);
+  const [productNameFetched, setProductNameFetched] = useState(false);
   const workgroupDropdownRef = useRef<HTMLDivElement>(null);
 
   const environments = flightDeckApiService.getEnvironments();
+
+  // Auto-fetch port speed when order number is entered (minimum 6 digits)
+  useEffect(() => {
+    if (formData.orderNumber && formData.orderNumber.length >= 6 && !portSpeedFetched) {
+      fetchPortSpeed(formData.orderNumber);
+    }
+  }, [formData.orderNumber]);
 
   // Auto-load user profile and workgroups when username is 7 characters or confirmed
   useEffect(() => {
@@ -45,6 +58,54 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
       loadUserProfile();
     }
   }, [formData.userName, userNameConfirmed, confirmedUserName]);
+
+  const fetchPortSpeed = async (orderNumber: string) => {
+    setIsFetchingPortSpeed(true);
+    try {
+      // Map FlightDeck environment to Swift API environment
+      const envMap: Record<string, string> = {
+        'Test 1': 'env1',
+        'Test 2': 'env2',
+        'Test 4': 'env4',
+      };
+      const swiftEnv = envMap[formData.environment] || 'env1';
+      
+      console.log(`🔍 Auto-fetching order details for order: ${orderNumber} from ${swiftEnv}`);
+      const result = await flightDeckApiService.getOrderPortSpeed(orderNumber, swiftEnv);
+      
+      if (result.success && result.data) {
+        console.log(`✅ Order details fetched:`, result.data);
+        console.log(`📌 Port Speed: ${result.data.portSpeed}, Product Name: ${result.data.productName}`);
+        
+        // The API returns an object with portSpeed, portSpeedMbps, and productName
+        const apiData = result.data as any;
+        
+        const updatedData = {
+          ...formData,
+          portSpeed: apiData.portSpeed || formData.portSpeed, // Display format: "10 Gbps"
+          portSpeedMbps: apiData.portSpeedMbps || formData.portSpeedMbps, // Numeric format: 10000
+          productName: apiData.productName || formData.productName, // Auto-detected product name
+        };
+        
+        console.log(`🔄 Updating form data:`, updatedData);
+        setFormData(updatedData);
+        
+        setPortSpeedFetched(!!apiData.portSpeed);
+        if (apiData.productName) {
+          setProductNameFetched(true);
+          console.log(`✅ Product name set to: ${apiData.productName}`);
+        }
+      } else {
+        console.log(`⚠️ Order details fetch failed: ${result.error}`);
+        // Don't show error to user, just let them select manually
+      }
+    } catch (error) {
+      console.error('Error fetching order details:', error);
+      // Silently fail - user can select manually
+    } finally {
+      setIsFetchingPortSpeed(false);
+    }
+  };
 
   const loadUserProfile = async () => {
     if (!formData.userName || formData.userName.length < 7) return;
@@ -62,6 +123,14 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
       if (result.success && result.data) {
         const userData = result.data;
         
+        // Store user profile data in form
+        setFormData(prev => ({
+          ...prev,
+          userCuid: userData.cuid || '',
+          userFullName: userData.fullName || '',
+          userEmail: userData.email || ''
+        }));
+        
         // Extract user workgroups
         if (userData.workgroupsList && Array.isArray(userData.workgroupsList)) {
           setUserWorkgroups(userData.workgroupsList);
@@ -74,6 +143,7 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
           }
           
           console.log(`Found ${userData.workgroupsList.length} workgroups for user ${formData.userName}`);
+          console.log(`User profile: ${userData.cuid} - ${userData.fullName} (${userData.email})`);
         } else {
           setUserWorkgroups([]);
           setUserProfileError('No workgroups found for this user');
@@ -235,18 +305,6 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
     }));
   };
 
-  const handleAddDevice = () => {
-    if (newDevice && !devices.includes(newDevice)) {
-      setDevices(prev => [...prev, newDevice]);
-      setFormData(prev => ({
-        ...prev,
-        preferredDevice: newDevice,
-      }));
-      setNewDevice('');
-      setShowAddDevice(false);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit(formData);
@@ -275,41 +333,83 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Order Number */}
+          {/* Environment - Moved before Order Number */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
+              Environment *
+            </label>
+            <select
+              value={formData.environment}
+              onChange={(e) => {
+                handleInputChange('environment', e.target.value);
+                // Reset port speed and product name when environment changes
+                setPortSpeedFetched(false);
+                setProductNameFetched(false);
+              }}
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 hover:border-gray-400"
+              disabled={isProcessing}
+              required
+            >
+              {environments.map((env) => (
+                <option key={env.name} value={env.name}>
+                  {env.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Order Number */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
               Order Number *
+              {isFetchingPortSpeed && (
+                <span className="text-xs text-blue-600 flex items-center gap-1">
+                  <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                  </svg>
+                  Fetching details...
+                </span>
+              )}
             </label>
             <input
               type="text"
               value={formData.orderNumber}
               onChange={(e) => handleInputChange('orderNumber', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="Enter order number"
+              placeholder="Enter order number (details will auto-fetch)"
               disabled={isProcessing}
             />
           </div>
 
           {/* Product Name */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
               Product Name *
+              {productNameFetched && (
+                <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full">
+                  Auto-detected
+                </span>
+              )}
             </label>
-            <select
+            <input
+              type="text"
+              list="product-names"
               value={formData.productName}
               onChange={(e) => handleInputChange('productName', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-all duration-200 hover:border-gray-400 focus:scale-[1.02]"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
+              placeholder="Enter or select product name..."
               disabled={isProcessing}
               required
-            >
-              <option value="">Select product type...</option>
-              <option value="DIA">DIA</option>
-              <option value="ELINE">ELINE</option>
-              <option value="ELAN">ELAN</option>
-              <option value="ELYNK">ELYNK</option>
-              <option value="IPVPN">IPVPN</option>
-              <option value="UNI">UNI</option>
-            </select>
+            />
+            <datalist id="product-names">
+              <option value="DIA" />
+              <option value="ELINE" />
+              <option value="ELAN" />
+              <option value="ELYNK" />
+              <option value="IPVPN" />
+              <option value="UNI" />
+            </datalist>
           </div>
 
           {/* Workflow Name */}
@@ -327,25 +427,6 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
               {workflowTypes.map((workflow) => (
                 <option key={workflow.value} value={workflow.value}>
                   {workflow.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Environment */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Environment *
-            </label>
-            <select
-              value={formData.environment}
-              onChange={(e) => handleInputChange('environment', e.target.value)}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isProcessing}
-            >
-              {environments.map((env) => (
-                <option key={env.name} value={env.name}>
-                  {env.name}
                 </option>
               ))}
             </select>
@@ -427,11 +508,19 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
             )}
             
             {userWorkgroups.length > 0 && !isLoadingUserProfile && (
-              <div className="mt-2 flex items-center space-x-2 text-sm text-green-600">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <span>Found {userWorkgroups.length} workgroup{userWorkgroups.length !== 1 ? 's' : ''} for your profile</span>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center space-x-2 text-sm text-green-600">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span>Found {userWorkgroups.length} workgroup{userWorkgroups.length !== 1 ? 's' : ''} for your profile</span>
+                </div>
+                {formData.userFullName && (
+                  <div className="text-xs text-gray-600 ml-6">
+                    <span className="font-medium">User:</span> {formData.userFullName} ({formData.userCuid})
+                    {formData.userEmail && <span className="ml-2">• {formData.userEmail}</span>}
+                  </div>
+                )}
               </div>
             )}
             
@@ -640,77 +729,54 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
           </div>
         </div>
 
-        {/* Preferred Device */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Preferred Device (Optional)
-          </label>
-          <div className="flex space-x-2">
-            <select
-              value={formData.preferredDevice}
-              onChange={(e) => handleInputChange('preferredDevice', e.target.value)}
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              disabled={isProcessing}
-            >
-              <option value="">Select device</option>
-              {devices.map((device) => (
-                <option key={device} value={device}>
-                  {device}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setShowAddDevice(!showAddDevice)}
-              className="px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 focus:ring-2 focus:ring-gray-500"
-              disabled={isProcessing}
-            >
-              Add Device
-            </button>
-          </div>
-          
-          {showAddDevice && (
-            <div className="mt-2 flex space-x-2">
-              <input
-                type="text"
-                value={newDevice}
-                onChange={(e) => setNewDevice(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter new device name"
-              />
-              <button
-                type="button"
-                onClick={handleAddDevice}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                disabled={!newDevice}
-              >
-                Add
-              </button>
+        {/* Port Speed Display - Auto-fetched from Order API */}
+        {formData.orderNumber && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="bg-blue-500 rounded-lg p-2">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700">Port Speed</label>
+                  {isFetchingPortSpeed ? (
+                    <div className="flex items-center space-x-2 text-sm text-blue-600 mt-1">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      <span>Fetching from order...</span>
+                    </div>
+                  ) : formData.portSpeed ? (
+                    <div className="flex items-center space-x-2 mt-1">
+                      <span className="text-lg font-bold text-blue-600">{formData.portSpeed}</span>
+                      <span className="text-xs text-green-600 bg-green-100 px-2 py-0.5 rounded-full">Auto-detected</span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-500 mt-1">Not available - will use manual selection if needed</span>
+                  )}
+                </div>
+              </div>
+              {formData.portSpeed && (
+                <div className="text-xs text-gray-500">
+                  From Order #{formData.orderNumber}
+                </div>
+              )}
             </div>
-          )}
-          
-          <p className="mt-2 text-sm text-blue-600">
-            ℹ️ This device will be used for mesh fallouts and manual device selection tasks
-          </p>
-        </div>
+          </div>
+        )}
 
-        {/* Preferred Port */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Preferred Port (Optional)
-          </label>
-          <input
-            type="text"
-            value={formData.preferredPort}
-            onChange={(e) => handleInputChange('preferredPort', e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            placeholder="Enter port name respective to selected device"
-            disabled={isProcessing}
-          />
-          <p className="mt-2 text-sm text-blue-600">
-            ℹ️ Enter port name respective of selected device and based on your order requirement
-          </p>
-        </div>
+        {/* Device and Port Management Section */}
+        <DeviceManager
+          selectedDevice={formData.preferredDevice || ''}
+          selectedPort={formData.preferredPort || ''}
+          onDeviceChange={(device) => handleInputChange('preferredDevice', device)}
+          onPortChange={(port) => handleInputChange('preferredPort', port)}
+          environment={formData.environment}
+          portSpeedMbps={formData.portSpeedMbps}
+        />
 
         {/* Submit Button */}
         <div className="flex flex-col space-y-3">

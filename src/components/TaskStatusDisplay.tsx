@@ -55,74 +55,71 @@ export const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          Enhanced Task Automation Status
+    <div className="bg-white rounded-lg shadow-md border border-gray-200 p-4">
+      {/* Header - Compact */}
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          <span className="text-blue-600">🚀</span>
+          Enhanced Task Automation
         </h3>
-        <div className="text-sm text-gray-600">
-          🚀 Now processes <strong>ANY</strong> task in Ready/Assigned/Created status with automatic mandatory field detection
-        </div>
+        <p className="text-xs text-gray-500 mt-1">
+          Auto-processes Ready/Assigned/Created tasks with smart field detection
+        </p>
       </div>
 
-      {/* Processing Status */}
+      {/* Processing Status - Compact */}
       {processingStatus && processingStatus.isProcessing && (
-        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mr-3"></div>
-            <div>
-              <div className="font-medium text-blue-900">Processing Tasks</div>
-              <div className="text-sm text-blue-700">
-                Current: {processingStatus.currentTask}
+        <div className="mb-3 bg-gradient-to-r from-blue-50 to-blue-100 border border-blue-300 rounded-md p-3">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+            <div className="flex-1 min-w-0">
+              <div className="font-medium text-sm text-blue-900 truncate">
+                {processingStatus.currentTask}
               </div>
-              <div className="text-sm text-blue-600">
-                Progress: {processingStatus.completedTasks}/{processingStatus.totalTasks}
+              <div className="text-xs text-blue-700">
+                {processingStatus.completedTasks}/{processingStatus.totalTasks} completed
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Task Statistics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-green-600">
+      {/* Task Statistics - Compact Grid */}
+      <div className="grid grid-cols-4 gap-2 mb-3">
+        <div className="bg-green-50 rounded-md p-2 text-center border border-green-200">
+          <div className="text-xl font-bold text-green-600">
             {categorizedTasks.completableTasks.length}
           </div>
-          <div className="text-sm text-gray-500">Auto-Completable</div>
-          <div className="text-xs text-gray-400">Ready/Assigned/Created</div>
+          <div className="text-[10px] text-gray-600 leading-tight">Auto-Ready</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-gray-600">
+        <div className="bg-gray-50 rounded-md p-2 text-center border border-gray-200">
+          <div className="text-xl font-bold text-gray-600">
             {categorizedTasks.nonCompletableTasks.length}
           </div>
-          <div className="text-sm text-gray-500">Other Status</div>
-          <div className="text-xs text-gray-400">In Progress/Completed/etc</div>
+          <div className="text-[10px] text-gray-600 leading-tight">Other</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">
+        <div className="bg-blue-50 rounded-md p-2 text-center border border-blue-200">
+          <div className="text-xl font-bold text-blue-600">
             {categorizedTasks.totalTasks}
           </div>
-          <div className="text-sm text-gray-500">Total Tasks</div>
-          <div className="text-xs text-gray-400">All statuses</div>
+          <div className="text-[10px] text-gray-600 leading-tight">Total</div>
         </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-purple-600">
+        <div className="bg-purple-50 rounded-md p-2 text-center border border-purple-200">
+          <div className="text-xl font-bold text-purple-600">
             {processingStatus?.completedTasks || 0}
           </div>
-          <div className="text-sm text-gray-500">Completed</div>
-          <div className="text-xs text-gray-400">This session</div>
+          <div className="text-[10px] text-gray-600 leading-tight">Done</div>
         </div>
       </div>
 
-      {/* Status Breakdown */}
-      <div className="mb-6">
-        <h4 className="font-medium text-gray-900 mb-3">Task Status Breakdown</h4>
-        <div className="flex flex-wrap gap-2">
+      {/* Status Breakdown - Compact Badges */}
+      <div className="mb-3">
+        <h4 className="text-xs font-semibold text-gray-700 mb-1.5">Status Breakdown</h4>
+        <div className="flex flex-wrap gap-1.5">
           {Object.entries(categorizedTasks.statusCounts).map(([status, count]) => (
             <span
               key={status}
-              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${getStatusColor(status)}`}
             >
               {status.toUpperCase()}: {count}
             </span>
@@ -130,21 +127,21 @@ export const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({
         </div>
       </div>
 
-      {/* Completable Tasks List */}
+      {/* Completable Tasks List - Compact */}
       {categorizedTasks.completableTasks.length > 0 && (
-        <div className="mb-6">
-          <h4 className="font-medium text-gray-900 mb-3 flex items-center">
-            <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
-            Auto-Completable Tasks ({categorizedTasks.completableTasks.length})
+        <div className="mb-3">
+          <h4 className="text-xs font-semibold text-gray-700 mb-1.5 flex items-center">
+            <span className="w-2 h-2 bg-green-500 rounded-full mr-1.5"></span>
+            Auto-Completable ({categorizedTasks.completableTasks.length})
           </h4>
-          <div className="space-y-2 max-h-40 overflow-y-auto">
+          <div className="space-y-1.5 max-h-32 overflow-y-auto">
             {categorizedTasks.completableTasks.map((task, index) => (
-              <div key={index} className="flex items-center justify-between p-2 bg-green-50 rounded border">
-                <div>
-                  <div className="font-medium text-sm">{task.TASK_NAME}</div>
-                  <div className="text-xs text-gray-500">ID: {task.ID}</div>
+              <div key={index} className="flex items-center justify-between p-2 bg-gradient-to-r from-green-50 to-green-100 rounded border border-green-200 hover:shadow-sm transition-shadow">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-xs text-gray-900 truncate">{task.TASK_NAME}</div>
+                  <div className="text-[10px] text-gray-500">ID: {task.ID}</div>
                 </div>
-                <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(task.TASK_STATUS)}`}>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ml-2 ${getStatusColor(task.TASK_STATUS)}`}>
                   {task.TASK_STATUS}
                 </span>
               </div>
@@ -153,29 +150,27 @@ export const TaskStatusDisplay: React.FC<TaskStatusDisplayProps> = ({
         </div>
       )}
 
-      {/* Enhancement Features */}
-      <div className="bg-gray-50 rounded-lg p-4">
-        <h4 className="font-medium text-gray-900 mb-2">🎯 Enhanced Features</h4>
-        <div className="space-y-1 text-sm text-gray-600">
+      {/* Enhancement Features - Compact */}
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-md p-2.5 border border-gray-200">
+        <h4 className="text-xs font-semibold text-gray-800 mb-1.5 flex items-center gap-1">
+          <span>🎯</span> Features
+        </h4>
+        <div className="grid grid-cols-1 gap-1 text-[10px] text-gray-600">
           <div className="flex items-center">
-            <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-            Universal task completion for Ready/Assigned/Created status
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full mr-1.5 flex-shrink-0"></span>
+            <span className="leading-tight">Universal task completion (Ready/Assigned/Created)</span>
           </div>
           <div className="flex items-center">
-            <span className="w-2 h-2 bg-blue-500 rounded-full mr-2"></span>
-            Automatic mandatory field detection from API metadata
+            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full mr-1.5 flex-shrink-0"></span>
+            <span className="leading-tight">Auto mandatory field detection from API</span>
           </div>
           <div className="flex items-center">
-            <span className="w-2 h-2 bg-purple-500 rounded-full mr-2"></span>
-            Interactive user prompts for missing required fields
+            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full mr-1.5 flex-shrink-0"></span>
+            <span className="leading-tight">Interactive prompts for missing fields</span>
           </div>
           <div className="flex items-center">
-            <span className="w-2 h-2 bg-orange-500 rounded-full mr-2"></span>
-            Smart field mapping with configuration fallback
-          </div>
-          <div className="flex items-center">
-            <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-            Enhanced logging and task categorization
+            <span className="w-1.5 h-1.5 bg-orange-500 rounded-full mr-1.5 flex-shrink-0"></span>
+            <span className="leading-tight">Smart field mapping with config fallback</span>
           </div>
         </div>
       </div>

@@ -6,16 +6,28 @@ A comprehensive, enterprise-grade application for automating FlightDeck task com
 
 ### Core Functionality
 - **Automated Task Processing**: Automatically completes ready and assigned tasks based on configurable rules
+- **Enhanced Field Support**: Shows ALL editable fields for tasks, including Network Build Form and Engineering Solution fields
+- **Intelligent Field Detection**: Automatically detects field types (text, dropdown, date, checkbox, number, textarea)
+- **Smart Default Values**: Pre-populates fields with intelligent defaults including auto-generated CLLI codes
 - **Intelligent Retry Logic**: Retries failed tasks with configurable retry limits and delays
 - **Real-time Monitoring**: Continuous monitoring of task status with live updates
 - **Environment Support**: Multi-environment support (Test 1, Test 2, Test 4)
 - **Workgroup Integration**: Dynamic workgroup loading and selection
 
+### Enhanced Field System
+- **Universal Field Display**: Shows both mandatory AND optional editable fields
+- **Network Build Form Support**: Handles fields like Rack Size, Device Mount Type, Backboard Size, Device Mount Provide By, ECN Port Other, ECN Device, Aisle(Rack), RMU, Device Mount Status, Lag Transport, Standard BIDI, Auto Select ECN Port, Device Elevation, Bay, Room, Fiber Source, Transport Bandwidth, Device Sub Type, Device Type
+- **Device CLLI ARM Generation**: Automatically generates CLLI ARM format (DNVFCOQE##W) with random numbers
+- **Engineering Solution Fields**: Supports Build Types, CCEA, Dedicated Options, WFMT Project Id, OSP Remarks, Constraints, Order Constraints, Procurement Request Type, Survey Category, Implementation Team, Building Access Qty, and more
+- **Field Type Support**: Text inputs, dropdowns with options, date pickers, checkboxes, number inputs, and textareas
+- **Smart Field Descriptions**: Context-aware help text for each field
+
 ### User Interface
 - **Modern React/Next.js UI**: Professional, responsive interface built with Tailwind CSS
 - **Real-time Dashboard**: Live status updates and progress tracking
-- **Task Configuration Management**: User-friendly interface to manage task completion rules
+- **Enhanced Task Configuration**: User-friendly interface to manage task completion rules and field mappings
 - **Comprehensive Task Monitor**: Detailed task information with sorting and filtering
+- **Dynamic Field Modal**: Interactive popup showing all relevant fields with pre-filled defaults
 
 ### Advanced Features
 - **Field Mapping System**: Configure mandatory field values for different task types
@@ -166,6 +178,46 @@ npm start
 - Source task ID correlation
 
 ## 🔧 Customization
+
+### Field Mapping Configuration
+
+#### ✨ Enhanced: Now Accepts Both Field Names AND Labels!
+The system now automatically accepts **both** field names (technical identifiers) and labels (what you see in FlightDeck UI):
+
+**✅ BOTH of these work:**
+```json
+{
+  "taskFieldMappings": {
+    "Network Build Form": {
+      "autoselectECNPort": "No",         // ← Field "name" (technical)
+      "Auto Select ECN Port": "No",      // ← Field "label" (FlightDeck UI)
+      "ECN Device": "Router-X1",         // ← Field "label" 
+      "deviceMountType": "Front Mount"   // ← Field "name"
+    }
+  }
+}
+```
+
+**🎯 User-Friendly Approach:**
+- Use whatever you see in the FlightDeck UI
+- The system automatically maps labels to correct field names
+- No more guessing technical field names!
+
+#### Automatic Label-to-Name Mapping
+The system includes intelligent mapping that:
+1. **Tries direct field name match first**
+2. **Falls back to label matching** (case-insensitive)
+3. **Handles partial matches** for slight variations
+4. **Logs the resolution** for transparency
+
+#### Common Field Mappings (Both Formats Work)
+| What You See in FlightDeck | Field Name | Example Value |
+|---------------------------|------------|---------------|
+| Auto Select ECN Port | `autoselectECNPort` | "No" |
+| ECN Device | `ecnDevice` | "Router-X1" |
+| Device Mount Type | `deviceMountType` | "Front Mount" |
+| Rack Size | `rackSize` | "42U" |
+| Device CLLI ARM | `deviceCLLIARM` | "DNVFCOQE76W" |
 
 ### Adding New Task Types
 1. Update task configuration in the UI

@@ -17,36 +17,58 @@ export const MandatoryFieldDisplay: React.FC<MandatoryFieldDisplayProps> = ({ ta
   }, [taskDetails]);
 
   if (!analysis) {
-    return <div>Loading mandatory field analysis...</div>;
+    return <div>Loading field analysis...</div>;
   }
 
   return (
     <div className="bg-white rounded-lg shadow p-4">
       <h3 className="text-lg font-semibold text-gray-900 mb-3">
-        Mandatory Fields Analysis
+        📝 Task Fields Analysis
       </h3>
       
-      <div className="grid grid-cols-3 gap-4 mb-4">
+      <div className="grid grid-cols-4 gap-4 mb-4">
         <div className="text-center">
-          <div className="text-2xl font-bold text-blue-600">{analysis.totalMandatoryFields}</div>
-          <div className="text-sm text-gray-500">Total Mandatory</div>
+          <div className="text-2xl font-bold text-red-600">{analysis.totalMandatoryFields}</div>
+          <div className="text-sm text-gray-500">Required Fields</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-blue-600">{analysis.optionalEditableFields.length}</div>
+          <div className="text-sm text-gray-500">Optional Fields</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-green-600">{analysis.providedFields.length}</div>
           <div className="text-sm text-gray-500">Fields Filled</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-red-600">{analysis.missingFields.length}</div>
-          <div className="text-sm text-gray-500">Missing Values</div>
+          <div className="text-2xl font-bold text-orange-600">{analysis.missingFields.length}</div>
+          <div className="text-sm text-gray-500">Need Input</div>
+        </div>
+      </div>
+
+      <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mb-4">
+        <div className="flex items-center">
+          <div className="flex-shrink-0">
+            <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <div className="ml-3">
+            <h4 className="text-sm font-medium text-blue-800">Enhanced Field Support</h4>
+            <div className="mt-1 text-sm text-blue-700">
+              AVIATOR now shows ALL editable fields for tasks, including Network Build Form fields 
+              like Rack Size, Device Mount Type, Device CLLI ARM, and Engineering Solution fields 
+              like Build Types, CCEA, and Implementation Team.
+            </div>
+          </div>
         </div>
       </div>
 
       {analysis.missingFields.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-md p-3 mb-4">
+        <div className="bg-orange-50 border border-orange-200 rounded-md p-3 mb-4">
           <div className="flex items-center">
             <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              <svg className="h-5 w-5 text-orange-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
               </svg>
             </div>
             <div className="ml-3">

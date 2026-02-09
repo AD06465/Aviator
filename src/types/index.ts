@@ -1,3 +1,11 @@
+export interface DeviceDetails {
+  type?: string;          // Device Type
+  subType?: string;       // Device SubType
+  status?: string;        // Status
+  roleCode?: string;      // ROLECODE from attributes
+  roleFullName?: string;  // ROLEFULLNAME from attributes
+}
+
 export interface Task {
   ID: number;
   TASK_NAME: string;
@@ -86,6 +94,7 @@ export interface Environment {
   name: string;
   apiUrl: string;
   flightdeckUrl: string;
+  meshApiUrl: string;
 }
 
 export interface WorkflowType {
@@ -94,8 +103,37 @@ export interface WorkflowType {
 }
 
 export interface Device {
+  id: string;
   name: string;
-  value: string;
+  isValid?: boolean;
+  validationError?: string;
+  lastValidated?: Date;
+}
+
+export interface DeviceValidationResponse {
+  q: string;
+  data: string[];
+  tid: string;
+}
+
+export interface DeviceValidationError {
+  error: {
+    type: string;
+    message: string;
+  };
+}
+
+export interface PortSpeed {
+  label: string;
+  value: number; // 1000, 10000, 100000
+}
+
+export interface PortInfo {
+  name: string;
+  portSysId: string;
+  type: string;
+  status: string;
+  class: string;
 }
 
 export interface Workgroup {
@@ -135,12 +173,29 @@ export interface OrderForm {
   workgroup: string;
   preferredDevice?: string;
   preferredPort?: string;
+  portSpeed?: string; // Display format: "10 Gbps"
+  portSpeedMbps?: number; // Numeric format for API: 10000
+  // User profile data from API
+  userCuid?: string;
+  userFullName?: string;
+  userEmail?: string;
 }
 
 export interface TaskManagementConfig {
   completableTasks: string[];
   retryableTasks: string[];
   taskFieldMappings: Record<string, Record<string, any>>;
+  conditionalRules?: Record<string, Array<{
+    id: string;
+    conditionType: 'workflow' | 'orderType' | 'custom';
+    conditionValue: string;
+    fields: Array<{
+      fieldName: string;
+      fieldValue: string;
+      fieldType?: 'text' | 'dropdown';
+      dropdownValue?: string;
+    }>;
+  }>>;
 }
 
 export interface ApiResponse<T> {

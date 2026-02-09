@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Task, ProcessingStatus, OrderForm, TaskFailureDetails } from '../types';
 import { formatTaskStatus, getStatusColor } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
-import { format } from 'date-fns';
+import { format, parseISO, isValid, formatDistanceToNow } from 'date-fns';
 
 interface TaskMonitorProps {
   tasks: Task[];
@@ -12,6 +12,75 @@ interface TaskMonitorProps {
   lastSearchTime?: Date | null;
   currentOrder?: OrderForm | null;
 }
+
+// Helper function to safely parse timestamps from FlightDeck API
+const parseFlightDeckTimestamp = (timestamp: string | undefined): Date | null => {
+  if (!timestamp) return null;
+  
+  try {
+    // Handle various timestamp formats from FlightDeck
+    // Format 1: "2026-02-09 15:13:00.0" (UTC from FlightDeck, with fractional seconds)
+    // Format 2: "2026-02-09T15:13:00Z" (ISO format)
+    // Format 3: "2026-02-09 15:13:00" (UTC from FlightDeck, without fractional seconds)
+    
+    let dateString = timestamp.trim();
+    
+    // FlightDeck returns timestamps in UTC format (space-separated)
+    // We need to convert to ISO format and mark as UTC for proper timezone conversion
+    if (dateString.includes(' ') && !dateString.includes('T')) {
+      // Replace space with 'T' for ISO format
+      dateString = dateString.replace(' ', 'T');
+      
+      // Remove fractional seconds if present
+      if (dateString.includes('.')) {
+        dateString = dateString.split('.')[0];
+      }
+      
+      // Add 'Z' to indicate this is UTC time from FlightDeck
+      // This allows the browser to convert to local timezone (IST)
+      if (!dateString.endsWith('Z')) {
+        dateString += 'Z';
+      }
+    }
+    
+    // Parse as ISO string (will be converted to local timezone by browser)
+    const date = parseISO(dateString);
+    if (isValid(date)) return date;
+    
+    // Fallback: try parsing as regular Date string
+    const regularDate = new Date(timestamp);
+    if (isValid(regularDate)) return regularDate;
+    
+    return null;
+  } catch (error) {
+    console.warn('Failed to parse timestamp:', timestamp, error);
+    return null;
+  }
+};
+
+// Helper function to format timestamp safely
+const formatTimestamp = (timestamp: string | undefined, formatStr: string = 'MMM dd, yyyy HH:mm:ss'): string => {
+  const date = parseFlightDeckTimestamp(timestamp);
+  if (!date) return 'N/A';
+  
+  try {
+    return format(date, formatStr);
+  } catch {
+    return 'Invalid Date';
+  }
+};
+
+// Helper function to get relative time
+const getRelativeTime = (timestamp: string | undefined): string => {
+  const date = parseFlightDeckTimestamp(timestamp);
+  if (!date) return '';
+  
+  try {
+    return formatDistanceToNow(date, { addSuffix: true });
+  } catch {
+    return '';
+  }
+};
 
 const TaskMonitor: React.FC<TaskMonitorProps> = ({ 
   tasks, 
@@ -25,22 +94,71 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
   const [failureDetails, setFailureDetails] = useState<Map<number, TaskFailureDetails>>(new Map());
   const [loadingFailureDetails, setLoadingFailureDetails] = useState<Set<number>>(new Set());
 
-  const sortedTasks = [...tasks].sort((a, b) => 
-    new Date(b.CREATED_DTTM).getTime() - new Date(a.CREATED_DTTM).getTime()
-  );
+  const sortedTasks = [...tasks].sort((a, b) => {
+    const dateA = parseFlightDeckTimestamp(a.CREATED_DTTM);
+    const dateB = parseFlightDeckTimestamp(b.CREATED_DTTM);
+    
+    if (!dateA || !dateB) return 0;
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  // State for tracking AVIATOR-completed tasks
+  const [aviatorCompletedCount, setAviatorCompletedCount] = useState(0);
+  const [isCheckingAviatorTasks, setIsCheckingAviatorTasks] = useState(false);
+
+  // Check for AVIATOR-completed tasks when tasks change
+  useEffect(() => {
+    const checkAviatorCompletedTasks = async () => {
+      if (isCheckingAviatorTasks) return; // Prevent multiple simultaneous checks
+      
+      setIsCheckingAviatorTasks(true);
+      let aviatorCount = 0;
+      
+      const completedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'completed');
+      
+      for (const task of completedTasks) {
+        try {
+          const details = await flightDeckApiService.getTaskDetails(task.ID);
+          if (details.success && details.data) {
+            const taskDetails = details.data;
+            
+            // Check if this task was completed by AVIATOR
+            const hasAviatorMarker = taskDetails.taskInstParamRequestList?.some((param: any) => 
+              param.name === 'complete_remarks' && 
+              param.value === 'Automated completion by AVIATOR'
+            );
+            
+            if (hasAviatorMarker) {
+              aviatorCount++;
+            }
+          }
+        } catch (error) {
+          // Silently handle errors for individual task checks
+        }
+      }
+      
+      setAviatorCompletedCount(aviatorCount);
+      setIsCheckingAviatorTasks(false);
+      
+      console.log(`📊 AVIATOR completed ${aviatorCount} out of ${completedTasks.length} completed tasks`);
+    };
+
+    if (tasks.length > 0) {
+      checkAviatorCompletedTasks();
+    }
+  }, [tasks, isCheckingAviatorTasks]);
 
   // Calculate actual completion statistics
   const getTaskStatistics = () => {
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'completed').length;
-    const aviatorCompletedTasks = processingStatus?.completedTasks || 0;
     const failedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'failed').length;
     const readyTasks = tasks.filter(t => ['ready', 'assigned', 'created'].includes(t.TASK_STATUS.toLowerCase())).length;
     
     return {
       totalTasks,
       completedTasks,
-      aviatorCompletedTasks,
+      aviatorCompletedTasks: aviatorCompletedCount,
       failedTasks,
       readyTasks,
       completionPercentage: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
@@ -238,7 +356,7 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
                 </span>
                 <span className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                  <span>By AVIATOR: {taskStats.aviatorCompletedTasks}</span>
+                  <span>By AVIATOR: {isCheckingAviatorTasks ? '...' : taskStats.aviatorCompletedTasks}</span>
                 </span>
                 {taskStats.failedTasks > 0 && (
                   <span className="flex items-center space-x-1">
@@ -429,8 +547,13 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
                       <div className="font-mono text-purple-800 truncate">{task.ORDER_ID}</div>
                     </div>
                     <div className="bg-gray-50 rounded px-2 py-1">
-                      <div className="text-gray-600 font-semibold">Created</div>
-                      <div className="font-mono text-gray-800">{format(new Date(task.CREATED_DTTM), 'MMM dd, HH:mm')}</div>
+                      <div className="text-gray-600 font-semibold text-xs">Created</div>
+                      <div className="font-mono text-gray-800 text-sm leading-tight" title={`Raw: ${task.CREATED_DTTM}\n${formatTimestamp(task.CREATED_DTTM)}`}>
+                        {formatTimestamp(task.CREATED_DTTM, 'MMM dd HH:mm')}
+                        <div className="text-xs text-gray-500 mt-1">
+                          {getRelativeTime(task.CREATED_DTTM)}
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
@@ -467,9 +590,16 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
                     )}
                     
                     {task.MODIFIED_DTTM !== task.CREATED_DTTM && (
-                      <div className="flex items-center space-x-2 text-xs text-gray-500">
-                        <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                        <span>Modified: {format(new Date(task.MODIFIED_DTTM), 'MMM dd, HH:mm')}</span>
+                      <div className="flex items-start space-x-2 text-xs text-gray-500">
+                        <span className="w-2 h-2 bg-gray-400 rounded-full mt-1 flex-shrink-0"></span>
+                        <div>
+                          <span className="font-mono text-sm" title={`Raw: ${task.MODIFIED_DTTM}\n${formatTimestamp(task.MODIFIED_DTTM)}`}>
+                            Modified: {formatTimestamp(task.MODIFIED_DTTM, 'MMM dd HH:mm:ss')}
+                          </span>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {getRelativeTime(task.MODIFIED_DTTM)}
+                          </div>
+                        </div>
                       </div>
                     )}
                     
