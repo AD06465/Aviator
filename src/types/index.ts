@@ -97,6 +97,45 @@ export interface Environment {
   meshApiUrl: string;
 }
 
+// Autopilot Workflow Types
+export interface AutopilotWorkflow {
+  _id: string;
+  name: string;
+  type: string;
+  status: 'complete' | 'running' | 'canceled' | 'paused' | 'error' | 'incomplete';
+  description: string;
+  created: string;
+  last_updated: string;
+  metrics?: {
+    start_time?: number;
+    end_time?: number;
+    progress?: number;
+    user?: string;
+  };
+  error?: Array<{
+    task: string;
+    message: string | object;
+    timestamp: number;
+  }>;
+}
+
+export interface AutopilotWorkflowsResponse {
+  message: string;
+  data: AutopilotWorkflow[];
+  metadata: {
+    skip: number;
+    limit: number;
+    total: number;
+    currentPageSize: number;
+  };
+}
+
+export interface AutopilotEnvironment {
+  name: string;
+  baseUrl: string;
+  loginUrl: string;
+}
+
 export interface WorkflowType {
   name: string;
   value: string;
@@ -181,6 +220,13 @@ export interface OrderForm {
   userEmail?: string;
 }
 
+export interface TaskSequencingRule {
+  priority?: number; // Lower number = higher priority (1 is highest)
+  dependsOn?: string[]; // Array of task names that must be completed first
+  waitForCompletion?: boolean; // If true, wait for this task to complete before processing others
+  delayAfter?: number; // Delay in seconds after this task completes
+}
+
 export interface TaskManagementConfig {
   completableTasks: string[];
   retryableTasks: string[];
@@ -196,6 +242,7 @@ export interface TaskManagementConfig {
       dropdownValue?: string;
     }>;
   }>>;
+  taskSequencing?: Record<string, TaskSequencingRule>;
 }
 
 export interface ApiResponse<T> {

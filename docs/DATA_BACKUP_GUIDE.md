@@ -19,11 +19,18 @@ The backup system automatically protects:
    - Mandatory field mappings
    - Dropdown field configurations
    - All custom task rules
+   - **Task sequencing rules** (priority, dependencies, blocking, delays)
+   - **Conditional rules** (workflow-based field values)
 
 3. **Field Mappings**
    - Text field values
    - Dropdown field selections
    - Dynamic placeholders ({{preferredDevice}}, etc.)
+
+4. **Custom Attributes**
+   - Custom Itential Workflows you've added
+   - Custom Product Names you've defined
+   - All Custom Attribute Manager data
 
 ## ✨ Key Features
 
@@ -120,7 +127,8 @@ The backup system automatically protects:
 All data is stored in browser localStorage with these keys:
 
 - `aviator_devices` - Device configurations
-- `aviator-task-config` - Task configurations
+- `aviator-task-config` - Task configurations (includes taskSequencing, conditionalRules)
+- `aviator-custom-attributes` - Custom Attribute Manager data
 - `aviator_backup_data` - Latest backup snapshot
 - `aviator_backup_metadata` - Backup statistics
 
@@ -130,10 +138,20 @@ Backup files are JSON format:
 
 ```json
 {
-  "timestamp": "2026-02-09T12:00:00.000Z",
+  "timestamp": "2026-02-11T13:00:00.000Z",
   "version": "1.0.0",
   "devices": [...],
-  "taskConfig": {...}
+  "taskConfig": {
+    "completableTasks": [...],
+    "retryableTasks": [...],
+    "taskFieldMappings": {...},
+    "conditionalRules": {...},
+    "taskSequencing": {...}
+  },
+  "customAttributes": {
+    "itentialWorkflows": [...],
+    "productNames": [...]
+  }
 }
 ```
 

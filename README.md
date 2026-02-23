@@ -6,6 +6,7 @@ A comprehensive, enterprise-grade application for automating FlightDeck task com
 
 ### Core Functionality
 - **Automated Task Processing**: Automatically completes ready and assigned tasks based on configurable rules
+- **Task Sequencing & Dependencies**: Control execution order with priorities and task dependencies
 - **Enhanced Field Support**: Shows ALL editable fields for tasks, including Network Build Form and Engineering Solution fields
 - **Intelligent Field Detection**: Automatically detects field types (text, dropdown, date, checkbox, number, textarea)
 - **Smart Default Values**: Pre-populates fields with intelligent defaults including auto-generated CLLI codes
@@ -13,6 +14,15 @@ A comprehensive, enterprise-grade application for automating FlightDeck task com
 - **Real-time Monitoring**: Continuous monitoring of task status with live updates
 - **Environment Support**: Multi-environment support (Test 1, Test 2, Test 4)
 - **Workgroup Integration**: Dynamic workgroup loading and selection
+- **🚀 Autopilot Monitor** ⭐ NEW: Real-time monitoring of Autopilot workflows with status tracking
+
+### Task Sequencing Features ⭐ NEW
+- **Priority-Based Ordering**: Set numeric priorities (1 = highest) to control which tasks process first
+- **Task Dependencies**: Define which tasks must complete before others can start
+- **Blocking/Wait Flags**: Pause all processing until critical checkpoint tasks finish
+- **Completion Delays**: Add cooldown periods (in seconds) after specific tasks
+- **Visual Rule Editor**: User-friendly UI to configure sequencing without editing JSON
+- **Dependency Validation**: Automatic checks to prevent circular dependencies
 
 ### Enhanced Field System
 - **Universal Field Display**: Shows both mandatory AND optional editable fields
@@ -50,6 +60,29 @@ A comprehensive, enterprise-grade application for automating FlightDeck task com
 - **FlightDeckApiService**: API communication layer
 - **Task Configuration Manager**: Rule management system
 - **Real-time Monitor**: Live task status tracking
+- **AutopilotMonitor**: Autopilot workflow monitoring and tracking
+
+## 🚀 Autopilot Monitor ⭐ NEW
+
+The Autopilot Monitor provides real-time visibility into Autopilot workflow executions:
+
+### Features
+- **Status-based Tabs**: View workflows by status (Running, Complete, Canceled, Paused, Error)
+- **Auto-refresh**: Updates every 15 seconds automatically
+- **Clickable Workflows**: Direct links to Autopilot workflow details
+- **Progress Tracking**: Visual progress bars for running workflows
+- **Error Details**: Detailed error messages for failed workflows
+- **Multi-environment**: Supports Test 1, Test 2, and Test 4 environments
+
+### Quick Start
+1. Submit an order in AVIATOR
+2. Click the "🚀 Autopilot Monitor" tab
+3. View workflows grouped by status
+4. Click workflow names to open in Autopilot
+
+For detailed documentation, see:
+- [Autopilot Monitor Quick Start](./AUTOPILOT_QUICKSTART.md)
+- [Autopilot Monitor Implementation Guide](./AUTOPILOT_MONITOR_GUIDE.md)
 
 ## 🔧 Configuration
 
@@ -233,6 +266,41 @@ Use placeholder values in field mappings:
 - `{{preferredDevice}}` - User-selected device
 - `{{preferredPort}}` - User-specified port
 - `{{workflowBasedValue}}` - Workflow-dependent values
+
+### Task Sequencing Configuration
+Control task execution order using the Task Sequencing Manager:
+
+1. **Open Task Configuration Tab** in the main UI
+2. **Expand "Task Sequencing & Dependencies"** section
+3. **Select a task** to configure sequencing rules
+4. **Set Priority** (optional): Lower number = higher priority
+5. **Add Dependencies** (optional): Tasks that must complete first
+6. **Enable Wait Flag** (optional): Block all processing until task completes
+7. **Set Delay** (optional): Cooldown period after task completes
+
+**Example Configuration:**
+```json
+{
+  "taskSequencing": {
+    "BE Installation Scheduled Date: BE completion notice": {
+      "priority": 1,
+      "waitForCompletion": true,
+      "delayAfter": 120
+    },
+    "Confirm/Schedule Activation": {
+      "priority": 2,
+      "dependsOn": ["BE Installation Scheduled Date: BE completion notice"]
+    },
+    "Service Validate - UNI (Tester)": {
+      "priority": 3,
+      "dependsOn": ["Confirm/Schedule Activation"],
+      "delayAfter": 30
+    }
+  }
+}
+```
+
+**📚 Detailed Guide:** See [Task Sequencing Guide](./TASK_SEQUENCING_GUIDE.md)
 
 ## 🔍 Troubleshooting
 

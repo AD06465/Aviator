@@ -1,5 +1,32 @@
 import { TaskManagementConfig } from '../types';
 
+/**
+ * Process date placeholders like {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}
+ * Returns date in YYYY-MM-DD format
+ */
+export const processDatePlaceholder = (value: string): string | null => {
+  const currentDatePattern = /^\{\{currentDate([+-]\d+)?\}\}$/;
+  const match = value.match(currentDatePattern);
+  
+  if (!match) {
+    return null;
+  }
+  
+  const offset = match[1] ? parseInt(match[1]) : 0;
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  
+  // Format as YYYY-MM-DD
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  
+  const formattedDate = `${year}-${month}-${day}`;
+  console.log(`📅 Date placeholder "${value}" resolved to: ${formattedDate} (offset: ${offset} days)`);
+  
+  return formattedDate;
+};
+
 export const defaultTaskConfig: TaskManagementConfig = {
   completableTasks: [
     'Confirm/Schedule Activation',
@@ -73,28 +100,102 @@ export const workflowTypes = [
   { name: 'Colorless', value: 'colorless' },
 ];
 
-// Task completion order priority
-export const taskPriorityOrder = [
-  'BE Installation Scheduled Date: BE completion notice', // Highest priority
-  'Confirm/Schedule Activation',
-  'Service Validate Field',
-  'Service Validate - UNI (Tester)',
-  'CM-Test and Tag',
-  'Service Validate Ethernet',
-  'Send Completion Details',
-];
-
-export const getTaskPriority = (taskName: string): number => {
-  const index = taskPriorityOrder.indexOf(taskName);
-  return index === -1 ? 999 : index;
+// Task completion order priority (default fallback)
+/**
+ * Get task priority for sorting
+ * Lower number = Higher priority (processed first)
+ * Default priority is 999 (lowest)
+ */
+export const getTaskPriority = (taskName: string, config?: TaskManagementConfig): number => {
+  const trimmedTaskName = taskName.trim();
+  // Check if task has priority defined in task sequencing config
+  if (config?.taskSequencing?.[trimmedTaskName]?.priority !== undefined) {
+    return config.taskSequencing[trimmedTaskName].priority!;
+  }
+  
+  // Default priority for tasks without explicit configuration
+  return 999;
 };
 
 export const shouldCompleteTask = (taskName: string, config: TaskManagementConfig): boolean => {
-  return config.completableTasks.includes(taskName);
+  // Trim task names to handle leading/trailing spaces
+  const trimmedTaskName = taskName.trim();
+  return config.completableTasks.some(task => task.trim() === trimmedTaskName);
 };
 
 export const shouldRetryTask = (taskName: string, config: TaskManagementConfig): boolean => {
-  return config.retryableTasks.includes(taskName);
+  // Trim task names to handle leading/trailing spaces
+  const trimmedTaskName = taskName.trim();
+  return config.retryableTasks.some(task => task.trim() === trimmedTaskName);
+};
+
+/**
+ * Check if a task's dependencies are met (all dependent tasks completed)
+ * Also accepts allTaskNames to check if dependency tasks exist in the current order
+ */
+export const areTaskDependenciesMet = (
+  taskName: string,
+  completedTaskNames: string[],
+  config: TaskManagementConfig,
+  allTaskNames?: string[]
+): boolean => {
+  const trimmedTaskName = taskName.trim();
+  const sequencing = config.taskSequencing?.[trimmedTaskName];
+  
+  // If no dependencies defined, task is ready
+  if (!sequencing?.dependsOn || sequencing.dependsOn.length === 0) {
+    return true;
+  }
+  
+  // Trim all task names for comparison
+  const trimmedCompletedTaskNames = completedTaskNames.map(name => name.trim());
+  const trimmedAllTaskNames = allTaskNames?.map(name => name.trim());
+  
+  // Check if all dependent tasks are completed OR don't exist in this order
+  const allDependenciesMet = sequencing.dependsOn.every(dependentTask => {
+    const trimmedDependentTask = dependentTask.trim();
+    
+    // If task is already completed, dependency is met
+    if (trimmedCompletedTaskNames.includes(trimmedDependentTask)) {
+      return true;
+    }
+    
+    // If allTaskNames provided, check if dependency task exists in current order
+    if (trimmedAllTaskNames && !trimmedAllTaskNames.includes(trimmedDependentTask)) {
+      console.log(`ℹ️ Dependency "${trimmedDependentTask}" doesn't exist in this order - treating as satisfied`);
+      return true; // Task doesn't exist, so dependency is satisfied
+    }
+    
+    return false;
+  });
+  
+  if (!allDependenciesMet) {
+    const missingDeps = sequencing.dependsOn.filter(dep => {
+      const trimmedDep = dep.trim();
+      return !trimmedCompletedTaskNames.includes(trimmedDep) && 
+        (!trimmedAllTaskNames || trimmedAllTaskNames.includes(trimmedDep));
+    });
+    console.log(`⏸️ Task "${taskName}" waiting for dependencies: ${missingDeps.join(', ')}`);
+  }
+  
+  return allDependenciesMet;
+};
+
+/**
+ * Check if a task should block other tasks from processing
+ */
+export const shouldWaitForTask = (taskName: string, config: TaskManagementConfig): boolean => {
+  const trimmedTaskName = taskName.trim();
+  return config.taskSequencing?.[trimmedTaskName]?.waitForCompletion === true;
+};
+
+/**
+ * Get delay required after task completion (in milliseconds)
+ */
+export const getDelayAfterTask = (taskName: string, config: TaskManagementConfig): number => {
+  const trimmedTaskName = taskName.trim();
+  const delaySeconds = config.taskSequencing?.[trimmedTaskName]?.delayAfter || 0;
+  return delaySeconds * 1000; // Convert to milliseconds
 };
 
 /**
@@ -171,10 +272,11 @@ export const getTaskFieldValue = (
   orderForm: any,
   taskDetails?: any
 ): string => {
-  const mapping = config.taskFieldMappings[taskName];
+  const trimmedTaskName = taskName.trim();
+  const mapping = config.taskFieldMappings[trimmedTaskName];
   
   // Check for conditional rules first
-  const conditionalRules = (config as any).conditionalRules?.[taskName];
+  const conditionalRules = (config as any).conditionalRules?.[trimmedTaskName];
   if (conditionalRules && Array.isArray(conditionalRules)) {
     for (const rule of conditionalRules) {
       let conditionMet = false;
@@ -184,6 +286,10 @@ export const getTaskFieldValue = (
         conditionMet = orderForm.workflowName?.toLowerCase() === rule.conditionValue.toLowerCase();
       } else if (rule.conditionType === 'orderType') {
         conditionMet = orderForm.orderType?.toLowerCase() === rule.conditionValue.toLowerCase();
+      } else if (rule.conditionType === 'itentialWorkflow') {
+        conditionMet = orderForm.workflowName?.toLowerCase() === rule.conditionValue.toLowerCase();
+      } else if (rule.conditionType === 'productName') {
+        conditionMet = orderForm.productName?.toLowerCase() === rule.conditionValue.toLowerCase();
       }
       
       if (conditionMet && rule.fields && Array.isArray(rule.fields)) {
@@ -202,6 +308,15 @@ export const getTaskFieldValue = (
             if (condField.fieldType === 'dropdown' && condField.dropdownValue) {
               console.log(`📋 Conditional dropdown "${fieldName}": "${condField.dropdownValue}" (label: "${value}")`);
               return condField.dropdownValue;
+            }
+            
+            // Handle date field type with dynamic date placeholders
+            if (condField.fieldType === 'date' || (typeof value === 'string' && value.includes('currentDate'))) {
+              const dateValue = processDatePlaceholder(value);
+              if (dateValue) {
+                console.log(`📅 Conditional date field "${fieldName}" = "${dateValue}" (from: "${value}")`);
+                return dateValue;
+              }
             }
             
             // Replace placeholders
@@ -252,9 +367,28 @@ export const getTaskFieldValue = (
       return value.dropdownValue;
     }
     
-    // If it's an object but not a dropdown, get the fieldValue property
+    // Handle date field type - if it's an object with date placeholder
+    if (typeof value === 'object' && value.fieldType === 'date' && value.fieldValue) {
+      const dateValue = processDatePlaceholder(value.fieldValue);
+      if (dateValue) {
+        console.log(`📅 Date field "${fieldName}" = "${dateValue}" (from: "${value.fieldValue}")`);
+        return dateValue;
+      }
+      value = value.fieldValue;
+    }
+    
+    // If it's an object but not a dropdown/date, get the fieldValue property
     if (typeof value === 'object' && value.fieldValue) {
       value = value.fieldValue;
+    }
+
+    // Handle date placeholders in string values
+    if (typeof value === 'string' && value.includes('currentDate')) {
+      const dateValue = processDatePlaceholder(value);
+      if (dateValue) {
+        console.log(`📅 Date field "${fieldName}" = "${dateValue}" (from: "${value}")`);
+        return dateValue;
+      }
     }
 
     // Replace placeholders with actual values

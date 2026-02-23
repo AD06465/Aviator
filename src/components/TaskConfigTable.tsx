@@ -1,8 +1,10 @@
 'use client';
 // Version: 2.0.0 - Full conditional rules support
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { logger } from '@/services/logging';
+import { TaskSequencingManager } from './TaskSequencingManager';
+import { TaskManagementConfig } from '../types';
 
 // Predefined workflow types
 const WORKFLOW_OPTIONS = [
@@ -18,16 +20,20 @@ const ORDER_TYPE_OPTIONS = [
   'DISCONNECT',
 ];
 
+// Default custom attributes
+const DEFAULT_ITENTIAL_WORKFLOWS: string[] = ['Monarch Onnet', 'Monarch Offnet', 'Colorless'];
+const DEFAULT_PRODUCT_NAMES: string[] = ['DIA', 'ELINE', 'ELAN', 'ELYNK', 'IPVPN', 'UNI'];
+
 export interface TaskFieldMapping {
   fieldName: string;
   fieldValue: string;
-  fieldType?: 'text' | 'dropdown';
+  fieldType?: 'text' | 'dropdown' | 'date';
   dropdownValue?: string;
 }
 
 export interface ConditionalRule {
   id: string;
-  conditionType: 'workflow' | 'orderType' | 'custom';
+  conditionType: 'workflow' | 'orderType' | 'itentialWorkflow' | 'productName' | 'custom';
   conditionValue: string;
   fields: TaskFieldMapping[];
 }
@@ -56,29 +62,42 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   });
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldValue, setNewFieldValue] = useState('');
-  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown'>('text');
+  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
   const [newDropdownValue, setNewDropdownValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown'>('text');
+  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
   const [editFieldName, setEditFieldName] = useState('');
   const [editFieldValue, setEditFieldValue] = useState('');
   const [editDropdownValue, setEditDropdownValue] = useState('');
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
 
   const [showConditionalRules, setShowConditionalRules] = useState<number | null>(null);
-  const [newRuleConditionType, setNewRuleConditionType] = useState<'workflow' | 'orderType' | 'custom'>('workflow');
+  const [newRuleConditionType, setNewRuleConditionType] = useState<'workflow' | 'orderType' | 'itentialWorkflow' | 'productName' | 'custom'>('workflow');
   const [newRuleConditionValue, setNewRuleConditionValue] = useState('');
   const [newRuleFields, setNewRuleFields] = useState<TaskFieldMapping[]>([]);
   const [newRuleFieldName, setNewRuleFieldName] = useState('');
   const [newRuleFieldValue, setNewRuleFieldValue] = useState('');
-  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown'>('text');
+  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
   const [newRuleDropdownValue, setNewRuleDropdownValue] = useState('');
+
+  // Custom attribute management
+  const [itentialWorkflows, setItentialWorkflows] = useState<string[]>(DEFAULT_ITENTIAL_WORKFLOWS);
+  const [productNames, setProductNames] = useState<string[]>(DEFAULT_PRODUCT_NAMES);
+  const [showAttributeManager, setShowAttributeManager] = useState(false);
+  const [newItentialWorkflow, setNewItentialWorkflow] = useState('');
+  const [newProductName, setNewProductName] = useState('');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'sequencing'>('tasks');
+  const [sequencingVersion, setSequencingVersion] = useState(0); // Force re-render for sequencing changes
+  
+  // Ref to prevent saveTasksToStorage from running during sequencing updates
+  const isSequencingUpdate = useRef(false);
 
   useEffect(() => {
     loadTasksFromStorage();
+    loadCustomAttributes();
     setIsInitialLoad(false);
   }, []);
 
@@ -89,6 +108,12 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
       // to prevent ConfigContext from overwriting conditionalRules
     }
   }, [tasks, isInitialLoad]);
+
+  useEffect(() => {
+    if (!isInitialLoad) {
+      saveCustomAttributes();
+    }
+  }, [itentialWorkflows, productNames, isInitialLoad]);
 
   const loadTasksFromStorage = () => {
     try {
@@ -219,7 +244,28 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   };
 
   const saveTasksToStorage = () => {
+    console.log('🚀 saveTasksToStorage called. isSequencingUpdate flag:', isSequencingUpdate.current);
+    
+    // Skip if we're in the middle of a sequencing update to prevent race condition
+    if (isSequencingUpdate.current) {
+      console.log('⏭️ Skipping saveTasksToStorage during sequencing update');
+      return;
+    }
+
     try {
+      // Load existing config to preserve taskSequencing
+      const existingConfig = localStorage.getItem('aviator-task-config');
+      let existingTaskSequencing = {};
+      if (existingConfig) {
+        try {
+          const parsed = JSON.parse(existingConfig);
+          existingTaskSequencing = parsed.taskSequencing || {};
+          console.log('🔄 Preserving existing taskSequencing:', Object.keys(existingTaskSequencing));
+        } catch (e) {
+          console.error('Error parsing existing config:', e);
+        }
+      }
+
       const config = {
         completableTasks: tasks.filter(t => t.isCompletable).map(t => t.taskName),
         retryableTasks: tasks.filter(t => t.isRetryable).map(t => t.taskName),
@@ -246,12 +292,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
           }
           return acc;
         }, {} as Record<string, ConditionalRule[]>),
+        taskSequencing: existingTaskSequencing, // ← PRESERVE EXISTING TASK SEQUENCING
       };
 
       console.log('💾 Saving task configuration:', {
         totalTasks: tasks.length,
         tasksWithRules: Object.keys(config.conditionalRules).length,
-        rulesData: config.conditionalRules
+        rulesData: config.conditionalRules,
+        hasTaskSequencing: Object.keys(existingTaskSequencing).length > 0,
+        taskSequencingKeys: Object.keys(existingTaskSequencing)
       });
 
       localStorage.setItem('aviator-task-config', JSON.stringify(config));
@@ -266,6 +315,71 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
         component: 'TaskConfigTable',
       }, error as Error);
     }
+  };
+
+  const loadCustomAttributes = () => {
+    try {
+      const stored = localStorage.getItem('aviator-custom-attributes');
+      if (stored) {
+        const data = JSON.parse(stored);
+        setItentialWorkflows(data.itentialWorkflows || DEFAULT_ITENTIAL_WORKFLOWS);
+        setProductNames(data.productNames || DEFAULT_PRODUCT_NAMES);
+      }
+    } catch (error) {
+      logger.error('Failed to load custom attributes', { component: 'TaskConfigTable' }, error as Error);
+    }
+  };
+
+  const saveCustomAttributes = () => {
+    try {
+      const data = {
+        itentialWorkflows,
+        productNames,
+      };
+      localStorage.setItem('aviator-custom-attributes', JSON.stringify(data));
+      
+      // Trigger storage event for other components to pick up changes
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'aviator-custom-attributes',
+        newValue: JSON.stringify(data),
+      }));
+    } catch (error) {
+      logger.error('Failed to save custom attributes', { component: 'TaskConfigTable' }, error as Error);
+    }
+  };
+
+  const handleAddItentialWorkflow = () => {
+    if (!newItentialWorkflow.trim()) {
+      alert('Please enter an Itential Workflow Name');
+      return;
+    }
+    if (itentialWorkflows.includes(newItentialWorkflow.trim())) {
+      alert('This workflow name already exists');
+      return;
+    }
+    setItentialWorkflows([...itentialWorkflows, newItentialWorkflow.trim()]);
+    setNewItentialWorkflow('');
+  };
+
+  const handleDeleteItentialWorkflow = (workflow: string) => {
+    setItentialWorkflows(itentialWorkflows.filter(w => w !== workflow));
+  };
+
+  const handleAddProductName = () => {
+    if (!newProductName.trim()) {
+      alert('Please enter a Product Name');
+      return;
+    }
+    if (productNames.includes(newProductName.trim())) {
+      alert('This product name already exists');
+      return;
+    }
+    setProductNames([...productNames, newProductName.trim()]);
+    setNewProductName('');
+  };
+
+  const handleDeleteProductName = (product: string) => {
+    setProductNames(productNames.filter(p => p !== product));
   };
 
   const handleAddTask = () => {
@@ -469,6 +583,108 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     handleUpdateTask(taskIndex, updatedTask);
   };
 
+  const getCurrentTaskConfig = (): TaskManagementConfig => {
+    // Load from localStorage to get taskSequencing
+    const stored = localStorage.getItem('aviator-task-config');
+    let taskSequencing = {};
+    if (stored) {
+      const config = JSON.parse(stored);
+      console.log('📖 getCurrentTaskConfig - parsed config has these keys:', Object.keys(config));
+      console.log('📖 config.taskSequencing exists?', !!config.taskSequencing);
+      console.log('📖 config.taskSequencing value:', config.taskSequencing);
+      taskSequencing = config.taskSequencing || {};
+      console.log('📖 Final taskSequencing keys:', Object.keys(taskSequencing));
+      console.log('📖 Final taskSequencing data:', JSON.stringify(taskSequencing, null, 2));
+    } else {
+      console.log('⚠️ getCurrentTaskConfig - no config in localStorage');
+    }
+
+    return {
+      completableTasks: tasks.filter(t => t.isCompletable).map(t => t.taskName),
+      retryableTasks: tasks.filter(t => t.isRetryable).map(t => t.taskName),
+      taskFieldMappings: tasks.reduce((acc, task) => {
+        if (task.fields.length > 0) {
+          acc[task.taskName] = task.fields.reduce((fieldAcc, field) => {
+            if (field.fieldType === 'dropdown') {
+              fieldAcc[field.fieldName] = {
+                fieldValue: field.fieldValue,
+                fieldType: field.fieldType,
+                dropdownValue: field.dropdownValue || field.fieldValue
+              };
+            } else {
+              fieldAcc[field.fieldName] = field.fieldValue;
+            }
+            return fieldAcc;
+          }, {} as Record<string, any>);
+        }
+        return acc;
+      }, {} as Record<string, Record<string, any>>),
+      conditionalRules: tasks.reduce((acc, task) => {
+        if (task.conditionalRules && task.conditionalRules.length > 0) {
+          acc[task.taskName] = task.conditionalRules;
+        }
+        return acc;
+      }, {} as Record<string, ConditionalRule[]>),
+      taskSequencing: taskSequencing,
+    };
+  };
+
+  const handleSequencingConfigChange = (newConfig: TaskManagementConfig) => {
+    console.log('📥 TaskConfigTable received sequencing config change:');
+    console.log('   Keys:', Object.keys(newConfig.taskSequencing || {}));
+    console.log('   Data:', JSON.stringify(newConfig.taskSequencing, null, 2));
+    
+    // Set flag to prevent saveTasksToStorage from overwriting
+    isSequencingUpdate.current = true;
+    
+    // Read existing config from localStorage and ONLY update taskSequencing
+    const existingStored = localStorage.getItem('aviator-task-config');
+    let finalConfig = newConfig;
+    
+    if (existingStored) {
+      try {
+        const existingConfig = JSON.parse(existingStored);
+        // Merge: keep all existing properties, only update taskSequencing
+        finalConfig = {
+          ...existingConfig,
+          taskSequencing: newConfig.taskSequencing || {},
+        };
+        console.log('📝 Merged with existing config. Final taskSequencing keys:', Object.keys(finalConfig.taskSequencing || {}));
+      } catch (e) {
+        console.error('Error parsing existing config:', e);
+      }
+    }
+    
+    // Save merged config to localStorage
+    const stringified = JSON.stringify(finalConfig);
+    console.log('💾 About to save merged config. taskSequencing:', JSON.stringify(finalConfig.taskSequencing, null, 2));
+    localStorage.setItem('aviator-task-config', stringified);
+    
+    // Verify it was saved
+    const readBack = localStorage.getItem('aviator-task-config');
+    const parsed = readBack ? JSON.parse(readBack) : null;
+    console.log('✅ Verified saved. taskSequencing keys:', Object.keys(parsed?.taskSequencing || {}));
+    
+    // Use setTimeout to ensure localStorage write completes and prevent race condition
+    // This ensures saveTasksToStorage() won't overwrite the sequencing data
+    setTimeout(() => {
+      // Force re-render to pick up the new sequencing config
+      setSequencingVersion(prev => {
+        console.log(`🔄 Incrementing sequencingVersion: ${prev} → ${prev + 1}`);
+        return prev + 1;
+      });
+      
+      // Clear flag after a short delay to allow re-render to complete
+      setTimeout(() => {
+        isSequencingUpdate.current = false;
+        console.log('✅ Sequencing update complete, saveTasksToStorage re-enabled');
+      }, 50);
+    }, 10); // Small delay to ensure write completes
+    
+    // DON'T notify parent during sequencing updates - we manage localStorage directly
+    // to prevent parent from overwriting our taskSequencing data
+  };
+
   const filteredTasks = tasks.filter(task =>
     task.taskName.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -479,6 +695,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
       hasRules: !!t.conditionalRules && t.conditionalRules.length > 0,
       rulesCount: t.conditionalRules?.length || 0
     })));
+
+    // Get taskSequencing from localStorage
+    const stored = localStorage.getItem('aviator-task-config');
+    let taskSequencing = {};
+    if (stored) {
+      const config = JSON.parse(stored);
+      taskSequencing = config.taskSequencing || {};
+    }
 
     const config = {
       completableTasks: tasks.filter(t => t.isCompletable).map(t => t.taskName),
@@ -507,6 +731,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
         }
         return acc;
       }, {} as Record<string, ConditionalRule[]>),
+      taskSequencing: taskSequencing,
     };
 
     console.log('📦 Final export config:', config);
@@ -589,32 +814,201 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
           isExpanded ? 'max-h-[5000px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
-        <div className="p-6">
-          <div className="mb-4 flex gap-4 items-center">
-            <div className="flex-1 relative">
-              <input
-                type="text"
-                placeholder="🔍 Search tasks..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg transition-all duration-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none hover:border-blue-400"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            <button
-              onClick={() => setIsAddingTask(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transform hover:scale-105 hover:shadow-lg transition-all duration-200 active:scale-95"
-            >
-              ➕ Add New Task
-            </button>
+        {/* Tabs */}
+        {isExpanded && (
+          <div className="border-b border-gray-200 bg-gray-50">
+            <nav className="flex px-6" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className={`py-4 px-6 font-medium text-sm transition-all duration-200 border-b-2 ${
+                  activeTab === 'tasks'
+                    ? 'border-blue-500 text-blue-600 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                📝 Task Configuration & Rules
+              </button>
+              <button
+                onClick={() => setActiveTab('sequencing')}
+                className={`py-4 px-6 font-medium text-sm transition-all duration-200 border-b-2 ${
+                  activeTab === 'sequencing'
+                    ? 'border-blue-500 text-blue-600 bg-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🔄 Task Sequencing & Dependencies
+              </button>
+            </nav>
           </div>
+        )}
+
+        <div className="p-6">
+          {/* Task Configuration Tab */}
+          {activeTab === 'tasks' && (
+            <>
+              <div className="mb-4 flex gap-4 items-center">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="🔍 Search tasks..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-4 py-2 border-2 border-gray-300 rounded-lg transition-all duration-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 focus:outline-none hover:border-blue-400"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <button
+                  onClick={() => setShowAttributeManager(!showAttributeManager)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transform hover:scale-105 hover:shadow-lg transition-all duration-200 active:scale-95"
+                >
+                  ⚙️ Manage Attributes
+                </button>
+                <button
+                  onClick={() => setIsAddingTask(true)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transform hover:scale-105 hover:shadow-lg transition-all duration-200 active:scale-95"
+                >
+                  ➕ Add New Task
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Task Sequencing Tab */}
+          {activeTab === 'sequencing' && (
+            <TaskSequencingManager 
+              key={sequencingVersion} // Force re-mount when config changes
+              config={getCurrentTaskConfig()} 
+              onConfigChange={handleSequencingConfigChange}
+            />
+          )}
+
+          {/* Task Configuration Content - only show in tasks tab */}
+          {activeTab === 'tasks' && (
+            <>
+              {showAttributeManager && (
+            <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-lg p-5 shadow-md animate-slideDown">
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-lg font-bold text-purple-900">⚙️ Custom Attribute Manager</h3>
+                <div className="group relative">
+                  <span className="text-purple-600 cursor-help text-sm">ℹ️</span>
+                  <div className="absolute left-0 top-6 w-96 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl">
+                    <p className="font-semibold mb-2">📋 How it works:</p>
+                    <p className="mb-2">1. Add values here for Product Names and Itential Workflow Names</p>
+                    <p className="mb-2">2. These values will appear as dropdown options in the Order Form</p>
+                    <p className="mb-2">3. Use these values to create conditional rules in Task Configuration</p>
+                    <p className="mb-2">4. Automation will match selected values and apply the correct rules</p>
+                    <p className="text-amber-300 mt-2">⚠️ Only add valid values - random typos will not be filtered!</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                {/* Itential Workflow Names */}
+                <div className="bg-white rounded-lg p-4 border border-purple-200">
+                  <h4 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                    <span>⚡</span>
+                    <span>Itential Workflow Names</span>
+                    <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">{itentialWorkflows.length}</span>
+                  </h4>
+                  
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={newItentialWorkflow}
+                      onChange={(e) => setNewItentialWorkflow(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddItentialWorkflow()}
+                      placeholder="Enter workflow name"
+                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                    />
+                    <button
+                      onClick={handleAddItentialWorkflow}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm transform hover:scale-105 transition-all"
+                    >
+                      ➕ Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {itentialWorkflows.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic text-center py-4">No workflows added yet</p>
+                    ) : (
+                      itentialWorkflows.map((workflow, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-purple-50 px-3 py-2 rounded-lg border border-purple-100">
+                          <span className="text-sm font-medium text-gray-700">{workflow}</span>
+                          <button
+                            onClick={() => handleDeleteItentialWorkflow(workflow)}
+                            className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transform hover:scale-110 transition-all"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Product Names */}
+                <div className="bg-white rounded-lg p-4 border border-purple-200">
+                  <h4 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+                    <span>📦</span>
+                    <span>Product Names</span>
+                    <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full">{productNames.length}</span>
+                  </h4>
+                  
+                  <div className="flex gap-2 mb-3">
+                    <input
+                      type="text"
+                      value={newProductName}
+                      onChange={(e) => setNewProductName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && handleAddProductName()}
+                      placeholder="Enter product name"
+                      className="flex-1 px-3 py-2 border rounded-lg text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                    />
+                    <button
+                      onClick={handleAddProductName}
+                      className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm transform hover:scale-105 transition-all"
+                    >
+                      ➕ Add
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {productNames.length === 0 ? (
+                      <p className="text-sm text-gray-500 italic text-center py-4">No products added yet</p>
+                    ) : (
+                      productNames.map((product, idx) => (
+                        <div key={idx} className="flex items-center justify-between bg-purple-50 px-3 py-2 rounded-lg border border-purple-100">
+                          <span className="text-sm font-medium text-gray-700">{product}</span>
+                          <button
+                            onClick={() => handleDeleteProductName(product)}
+                            className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transform hover:scale-110 transition-all"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 text-center">
+                <button
+                  onClick={() => setShowAttributeManager(false)}
+                  className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 text-sm"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="overflow-x-auto">
             <table className="min-w-full">
@@ -711,11 +1105,12 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               <div className="flex gap-2">
                                                 <select
                                                   value={editFieldType}
-                                                  onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown')}
+                                                  onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
                                                   className="px-2 py-1 border rounded text-sm"
                                                 >
                                                   <option value="text">📝 Text</option>
                                                   <option value="dropdown">📋 Dropdown</option>
+                                                  <option value="date">📅 Date</option>
                                                 </select>
                                                 <input
                                                   type="text"
@@ -771,7 +1166,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               <span className="font-medium text-sm">{field.fieldName}:</span>
                                               <span className="text-sm text-gray-600">{field.fieldValue}</span>
                                               {field.fieldType === 'dropdown' && (
-                                                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full font-medium hover:bg-purple-200 transition-colors duration-200">📋 Dropdown</span>
+                                                <>
+                                                  <span className="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded-full font-medium hover:bg-purple-200 transition-colors duration-200">📋 Dropdown</span>
+                                                  {field.dropdownValue && field.dropdownValue !== field.fieldValue && (
+                                                    <span className="text-xs text-gray-500">(Value: {field.dropdownValue})</span>
+                                                  )}
+                                                </>
+                                              )}
+                                              {field.fieldType === 'date' && (
+                                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium hover:bg-blue-200 transition-colors duration-200">📅 Date</span>
                                               )}
                                               <div className="ml-auto flex gap-1">
                                                 <button
@@ -802,22 +1205,29 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         <div className="absolute left-0 top-6 w-80 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl">
                                           <p className="font-semibold mb-2">📝 Text Field:</p>
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Requested Due Date")</p>
-                                          <p className="mb-3">• <b>Value:</b> Text to set (can use {{placeholders}})</p>
+                                          <p className="mb-3">• <b>Value:</b> Text to set (can use {'{{placeholders}}'})</p>
                                           <p className="font-semibold mb-2">📋 Dropdown Field:</p>
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Fallout Action")</p>
                                           <p className="mb-1">• <b>Label:</b> What shows in dropdown (e.g., "Enter Port Data") <span className="text-green-300">✓ Required</span></p>
-                                          <p>• <b>Value:</b> Optional - Only if different from Label</p>
+                                          <p className="mb-3">• <b>Value:</b> Optional - Only if different from Label</p>
+                                          <p className="font-semibold mb-2">📅 Date Field:</p>
+                                          <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "FOC Date")</p>
+                                          <p className="mb-1">• <b>Value:</b> Date placeholder:</p>
+                                          <p className="ml-4 mb-1">- {'{{currentDate}}'} = Today</p>
+                                          <p className="ml-4 mb-1">- {'{{currentDate+7}}'} = 7 days from now</p>
+                                          <p className="ml-4">- {'{{currentDate-3}}'} = 3 days ago</p>
                                         </div>
                                       </div>
                                     </div>
                                     <div className="flex gap-2 mb-2">
                                       <select
                                         value={editFieldType}
-                                        onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown')}
+                                        onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
                                         className="px-2 py-1 border rounded text-sm"
                                       >
                                         <option value="text">📝 Text</option>
                                         <option value="dropdown">📋 Dropdown</option>
+                                        <option value="date">📅 Date</option>
                                       </select>
                                       <input
                                         type="text"
@@ -836,6 +1246,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         placeholder="Value"
                                         className="w-full px-3 py-1 border rounded text-sm mb-2"
                                         title="The value to set for this field (can use placeholders like {{preferredDevice}})"
+                                      />
+                                    ) : editFieldType === 'date' ? (
+                                      <input
+                                        type="text"
+                                        value={editFieldValue}
+                                        onChange={(e) => setEditFieldValue(e.target.value)}
+                                        placeholder="e.g., {{currentDate+7}}"
+                                        className="w-full px-3 py-1 border rounded text-sm mb-2"
+                                        title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
                                       />
                                     ) : (
                                       <div className="flex gap-2 mb-2">
@@ -909,8 +1328,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         </div>
                                         <div className="space-y-1">
                                           {rule.fields.map((field, idx) => (
-                                            <div key={idx} className="text-sm bg-purple-50 p-2 rounded">
+                                            <div key={idx} className="text-sm bg-purple-50 p-2 rounded flex items-center gap-2">
                                               <span className="font-medium">{field.fieldName}:</span> {field.fieldValue}
+                                              {field.fieldType === 'dropdown' && field.dropdownValue && field.dropdownValue !== field.fieldValue && (
+                                                <span className="text-xs text-gray-500 ml-2">(Value: {field.dropdownValue})</span>
+                                              )}
+                                              {field.fieldType === 'date' && (
+                                                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full">📅</span>
+                                              )}
                                             </div>
                                           ))}
                                         </div>
@@ -939,12 +1364,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                     <div className="flex gap-2">
                                       <select
                                         value={newRuleConditionType}
-                                        onChange={(e) => setNewRuleConditionType(e.target.value as 'workflow' | 'orderType' | 'custom')}
+                                        onChange={(e) => setNewRuleConditionType(e.target.value as any)}
                                         className="px-3 py-2 border rounded-lg text-sm bg-white hover:border-purple-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
                                         title="Choose what type of condition triggers this rule"
                                       >
                                         <option value="workflow">🔄 Workflow Type</option>
                                         <option value="orderType">📦 Order Type</option>
+                                        <option value="itentialWorkflow">⚡ Itential Workflow Name</option>
+                                        <option value="productName">📦 Product Name</option>
                                         <option value="custom">✏️ Custom</option>
                                       </select>
                                       
@@ -970,6 +1397,32 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                           <option value="">-- Select Order Type --</option>
                                           {ORDER_TYPE_OPTIONS.map(orderType => (
                                             <option key={orderType} value={orderType}>{orderType}</option>
+                                          ))}
+                                        </select>
+                                      ) : newRuleConditionType === 'itentialWorkflow' ? (
+                                        <select
+                                          value={newRuleConditionValue}
+                                          onChange={(e) => setNewRuleConditionValue(e.target.value)}
+                                          className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white hover:border-purple-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                                          title="Select which Itential Workflow triggers this rule"
+                                        >
+                                          <option value="">-- Select Itential Workflow --</option>
+                                          {itentialWorkflows.length === 0 && <option disabled>No workflows defined - Add in Attribute Manager</option>}
+                                          {itentialWorkflows.map(workflow => (
+                                            <option key={workflow} value={workflow}>{workflow}</option>
+                                          ))}
+                                        </select>
+                                      ) : newRuleConditionType === 'productName' ? (
+                                        <select
+                                          value={newRuleConditionValue}
+                                          onChange={(e) => setNewRuleConditionValue(e.target.value)}
+                                          className="flex-1 px-3 py-2 border rounded-lg text-sm bg-white hover:border-purple-400 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                                          title="Select which Product Name triggers this rule"
+                                        >
+                                          <option value="">-- Select Product Name --</option>
+                                          {productNames.length === 0 && <option disabled>No products defined - Add in Attribute Manager</option>}
+                                          {productNames.map(product => (
+                                            <option key={product} value={product}>{product}</option>
                                           ))}
                                         </select>
                                       ) : (
@@ -1001,7 +1454,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               <span className="font-medium text-sm">{field.fieldName}:</span>
                                               <span className="text-sm text-gray-600">{field.fieldValue}</span>
                                               {field.fieldType === 'dropdown' && (
-                                                <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full">📋</span>
+                                                <>
+                                                  <span className="text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded-full">📋</span>
+                                                  {field.dropdownValue && field.dropdownValue !== field.fieldValue && (
+                                                    <span className="text-xs text-gray-500">(Value: {field.dropdownValue})</span>
+                                                  )}
+                                                </>
+                                              )}
+                                              {field.fieldType === 'date' && (
+                                                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">📅</span>
                                               )}
                                               <button
                                                 onClick={() => handleDeleteRuleField(idx)}
@@ -1019,11 +1480,12 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         <div className="flex gap-2 mb-2">
                                           <select
                                             value={newRuleFieldType}
-                                            onChange={(e) => setNewRuleFieldType(e.target.value as 'text' | 'dropdown')}
+                                            onChange={(e) => setNewRuleFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
                                             className="px-2 py-1 border rounded-lg text-sm"
                                           >
                                             <option value="text">📝 Text</option>
                                             <option value="dropdown">📋 Dropdown</option>
+                                            <option value="date">📅 Date</option>
                                           </select>
                                           <input
                                             type="text"
@@ -1042,6 +1504,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                             placeholder="Value"
                                             className="w-full px-3 py-1 border rounded-lg text-sm mb-2 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
                                             title="The value to set for this field (can use placeholders like {{preferredDevice}})"
+                                          />
+                                        ) : newRuleFieldType === 'date' ? (
+                                          <input
+                                            type="text"
+                                            value={newRuleFieldValue}
+                                            onChange={(e) => setNewRuleFieldValue(e.target.value)}
+                                            placeholder="e.g., {{currentDate+7}}"
+                                            className="w-full px-3 py-1 border rounded-lg text-sm mb-2 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                                            title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
                                           />
                                         ) : (
                                           <div className="flex gap-2 mb-2">
@@ -1094,6 +1565,70 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
               </tbody>
             </table>
           </div>
+
+          {/* Add New Task Modal */}
+          {isAddingTask && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+                <h3 className="text-xl font-bold mb-4 text-gray-800">➕ Add New Task</h3>
+                
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Task Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newTask.taskName}
+                      onChange={(e) => setNewTask({ ...newTask, taskName: e.target.value })}
+                      placeholder="Enter task name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newTask.isCompletable}
+                        onChange={(e) => setNewTask({ ...newTask, isCompletable: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-200"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Completable</span>
+                    </label>
+
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={newTask.isRetryable}
+                        onChange={(e) => setNewTask({ ...newTask, isRetryable: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-200"
+                      />
+                      <span className="text-sm font-medium text-gray-700">Retryable</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => setIsAddingTask(false)}
+                    className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddTask}
+                    disabled={!newTask.taskName.trim()}
+                    className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    Add Task
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+            </>
+          )}
         </div>
       </div>
     </div>

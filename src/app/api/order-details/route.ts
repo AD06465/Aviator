@@ -225,11 +225,26 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ Error fetching order details:', error);
+    const errorCode = error?.cause?.code || error?.code;
+    const errorMessage = error.message || 'Failed to fetch order details';
+    
+    // Log based on error type
+    if (errorCode === 'ENOTFOUND') {
+      console.warn('⚠️ FlightDeck API DNS error - check VPN connection');
+    } else if (errorCode === 'ECONNRESET' || errorCode === 'ETIMEDOUT') {
+      console.warn('⚠️ FlightDeck API connection error:', errorCode);
+    } else {
+      console.error('❌ Error fetching order details:', error);
+    }
+    
     return NextResponse.json(
       { 
         success: false, 
-        error: error.message || 'Failed to fetch order details' 
+        error: errorCode === 'ENOTFOUND'
+          ? 'Cannot reach FlightDeck API. Check VPN connection.'
+          : errorCode === 'ECONNRESET'
+          ? 'Connection lost to FlightDeck API. Please retry.'
+          : errorMessage
       },
       { status: 500 }
     );

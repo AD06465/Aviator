@@ -7,6 +7,7 @@ import TaskMonitor from '../components/TaskMonitor';
 import TaskConfigManager from '../components/TaskConfigManager';
 import TaskConfigTable from '../components/TaskConfigTable';
 import BackupManager from '../components/BackupManager';
+import AutopilotMonitor from '../components/AutopilotMonitor';
 import Toast from '../components/Toast';
 import { OrderForm as OrderFormType, Task, TaskManagementConfig, ProcessingStatus } from '../types';
 import { defaultTaskConfig } from '../lib/taskConfig';
@@ -19,11 +20,12 @@ export default function HomePage() {
   const [taskConfig, setTaskConfig] = useState<TaskManagementConfig>(defaultTaskConfig);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
   const [taskProcessor, setTaskProcessor] = useState<TaskProcessor | null>(null);
-  const [activeTab, setActiveTab] = useState<'monitor' | 'config' | 'table' | 'backup'>('table');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'config' | 'table' | 'backup' | 'autopilot'>('table');
   const [isSearchingTasks, setIsSearchingTasks] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lastSearchTime, setLastSearchTime] = useState<Date | null>(null);
   const [toast, setToast] = useState<{message: string; type: 'success' | 'error' | 'info' | 'warning'; isVisible: boolean} | null>(null);
+  const [monitoringIntervalId, setMonitoringIntervalId] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     // Initialize task processor
@@ -124,7 +126,14 @@ export default function HomePage() {
     }
 
     // Set up periodic task monitoring (separate from processing)
+    // Only monitor FlightDeck when on monitor or table tabs
     const monitoringInterval = setInterval(async () => {
+      // Skip if on autopilot tab to reduce server load
+      if (activeTab === 'autopilot' || activeTab === 'config' || activeTab === 'backup') {
+        console.log('Skipping FlightDeck monitoring - not on active tab');
+        return;
+      }
+      
       try {
         console.log('Performing periodic task search...');
         const result = await flightDeckApiService.searchTasks(orderForm.orderNumber);
@@ -158,10 +167,10 @@ export default function HomePage() {
           setSearchError('Failed to monitor tasks. Please check your connection.');
         }
       }
-    }, 30000); // Monitor every 30 seconds
+    }, 45000); // Monitor every 45 seconds (reduced frequency)
 
-    // Cleanup on unmount
-    return () => clearInterval(monitoringInterval);
+    // Store the interval ID for cleanup
+    setMonitoringIntervalId(monitoringInterval);
   };
 
   const handleStopProcessing = () => {
@@ -169,13 +178,43 @@ export default function HomePage() {
       taskProcessor.stopProcessing();
       setProcessingStatus(null);
     }
+    
+    // Clear the monitoring interval to stop background API calls
+    if (monitoringIntervalId) {
+      clearInterval(monitoringIntervalId);
+      setMonitoringIntervalId(null);
+      console.log('Monitoring interval cleared - background API calls stopped');
+    }
   };
 
   const handleConfigChange = (newConfig: TaskManagementConfig) => {
     setTaskConfig(newConfig);
     
-    // Save to localStorage for persistence
-    localStorage.setItem('aviator-task-config', JSON.stringify(newConfig));
+    // Read existing config and preserve conditionalRules and taskSequencing
+    const saved = localStorage.getItem('aviator-task-config');
+    let existingConditionalRules = {};
+    let existingTaskSequencing = {};
+    
+    if (saved) {
+      try {
+        const existing = JSON.parse(saved);
+        existingConditionalRules = existing.conditionalRules || {};
+        existingTaskSequencing = existing.taskSequencing || {};
+      } catch (e) {
+        console.error('Error parsing existing config:', e);
+      }
+    }
+    
+    // Merge: preserve conditionalRules and taskSequencing from localStorage
+    const configToSave = {
+      ...newConfig,
+      conditionalRules: newConfig.conditionalRules || existingConditionalRules,
+      taskSequencing: newConfig.taskSequencing || existingTaskSequencing,
+    };
+    
+    // Save merged config to localStorage for persistence
+    console.log('🌐 page.tsx saving config. taskSequencing keys:', Object.keys(configToSave.taskSequencing || {}));
+    localStorage.setItem('aviator-task-config', JSON.stringify(configToSave));
   };
 
   // Load saved config on mount
@@ -190,6 +229,16 @@ export default function HomePage() {
       console.error('Error loading saved config:', error);
     }
   }, []);
+
+  // Cleanup monitoring interval on unmount
+  useEffect(() => {
+    return () => {
+      if (monitoringIntervalId) {
+        clearInterval(monitoringIntervalId);
+        console.log('Component unmounting - monitoring interval cleared');
+      }
+    };
+  }, [monitoringIntervalId]);
 
   const isProcessing = processingStatus?.isProcessing || isSearchingTasks || false;
 
@@ -343,7 +392,19 @@ export default function HomePage() {
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
-                📊 Task Monitor
+                📊 FlightDeck Monitor
+              </button>
+            )}
+            {currentOrder && (
+              <button
+                onClick={() => setActiveTab('autopilot')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'autopilot'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                🚀 Autopilot Monitor
               </button>
             )}
             {(tasks.length > 0 || processingStatus) && (
@@ -373,10 +434,19 @@ export default function HomePage() {
           />
         )}
 
+        {activeTab === 'autopilot' && currentOrder && (
+          <AutopilotMonitor 
+            orderNumber={currentOrder.orderNumber}
+            environment={currentOrder.environment}
+            isActive={activeTab === 'autopilot'}
+          />
+        )}
+
         {activeTab === 'table' && (
           <TaskConfigTable onConfigChange={(taskConfigs) => {
             // Convert task configs back to TaskManagementConfig format
             const config: TaskManagementConfig = {
+              ...taskConfig, // Preserve existing config (including taskSequencing)
               completableTasks: taskConfigs.filter(t => t.isCompletable).map(t => t.taskName),
               retryableTasks: taskConfigs.filter(t => t.isRetryable).map(t => t.taskName),
               taskFieldMappings: taskConfigs.reduce((acc, task) => {

@@ -41,7 +41,44 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
   const [productNameFetched, setProductNameFetched] = useState(false);
   const workgroupDropdownRef = useRef<HTMLDivElement>(null);
 
+  // Load custom attributes from Attribute Manager
+  const [availableProductNames, setAvailableProductNames] = useState<string[]>([]);
+  const [availableWorkflows, setAvailableWorkflows] = useState<string[]>([]);
+
   const environments = flightDeckApiService.getEnvironments();
+
+  // Load custom attributes from localStorage
+  useEffect(() => {
+    loadCustomAttributes();
+    
+    // Listen for changes to custom attributes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'aviator-custom-attributes') {
+        loadCustomAttributes();
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const loadCustomAttributes = () => {
+    try {
+      const stored = localStorage.getItem('aviator-custom-attributes');
+      console.log('📦 Loading custom attributes from localStorage:', stored);
+      if (stored) {
+        const data = JSON.parse(stored);
+        console.log('✅ Parsed custom attributes:', data);
+        setAvailableProductNames(data.productNames || []);
+        setAvailableWorkflows(data.itentialWorkflows || []);
+        console.log(`✅ Set ${data.productNames?.length || 0} product names and ${data.itentialWorkflows?.length || 0} workflows`);
+      } else {
+        console.warn('⚠️ No custom attributes found in localStorage');
+      }
+    } catch (error) {
+      console.error('❌ Failed to load custom attributes:', error);
+    }
+  };
 
   // Auto-fetch port speed when order number is entered (minimum 6 digits)
   useEffect(() => {
@@ -80,11 +117,36 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
         // The API returns an object with portSpeed, portSpeedMbps, and productName
         const apiData = result.data as any;
         
+        // Always use product name from API if available
+        let productNameToSet = formData.productName; // Keep existing if no API value
+        if (apiData.productName) {
+          productNameToSet = apiData.productName.trim();
+          console.log(`✅ Product name from API: "${productNameToSet}"`);
+          
+          // Check if product name exists in dropdown options
+          const matchedProduct = availableProductNames.find(
+            product => product.toUpperCase().trim() === productNameToSet.toUpperCase().trim()
+          );
+          
+          if (matchedProduct) {
+            console.log(`✓ Product name matches existing dropdown value: "${matchedProduct}"`);
+          } else {
+            // Add the API product name to available options if not already present
+            console.log(`➕ Adding "${productNameToSet}" to product name dropdown options`);
+            setAvailableProductNames(prev => {
+              if (!prev.includes(productNameToSet)) {
+                return [...prev, productNameToSet];
+              }
+              return prev;
+            });
+          }
+        }
+        
         const updatedData = {
           ...formData,
           portSpeed: apiData.portSpeed || formData.portSpeed, // Display format: "10 Gbps"
           portSpeedMbps: apiData.portSpeedMbps || formData.portSpeedMbps, // Numeric format: 10000
-          productName: apiData.productName || formData.productName, // Auto-detected product name
+          productName: productNameToSet, // Always set if API returned a value
         };
         
         console.log(`🔄 Updating form data:`, updatedData);
@@ -93,7 +155,7 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
         setPortSpeedFetched(!!apiData.portSpeed);
         if (apiData.productName) {
           setProductNameFetched(true);
-          console.log(`✅ Product name set to: ${apiData.productName}`);
+          console.log(`✅ Product name auto-populated: ${productNameToSet}`);
         }
       } else {
         console.log(`⚠️ Order details fetch failed: ${result.error}`);
@@ -392,24 +454,28 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
                 </span>
               )}
             </label>
-            <input
-              type="text"
-              list="product-names"
+            <select
               value={formData.productName}
               onChange={(e) => handleInputChange('productName', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-400"
-              placeholder="Enter or select product name..."
               disabled={isProcessing}
               required
-            />
-            <datalist id="product-names">
-              <option value="DIA" />
-              <option value="ELINE" />
-              <option value="ELAN" />
-              <option value="ELYNK" />
-              <option value="IPVPN" />
-              <option value="UNI" />
-            </datalist>
+            >
+              <option value="">Select product name</option>
+              {availableProductNames.length === 0 && (
+                <option disabled>No products defined - Add in Attribute Manager</option>
+              )}
+              {availableProductNames.map((product) => (
+                <option key={product} value={product}>
+                  {product}
+                </option>
+              ))}
+            </select>
+            {availableProductNames.length === 0 && (
+              <p className="mt-2 text-sm text-amber-600">
+                ⚠️ No product names available. Go to Task Config Manager → Manage Attributes to add values.
+              </p>
+            )}
           </div>
 
           {/* Workflow Name */}
@@ -422,14 +488,23 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
               onChange={(e) => handleInputChange('workflowName', e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               disabled={isProcessing}
+              required
             >
               <option value="">Select workflow</option>
-              {workflowTypes.map((workflow) => (
-                <option key={workflow.value} value={workflow.value}>
-                  {workflow.name}
+              {availableWorkflows.length === 0 && (
+                <option disabled>No workflows defined - Add in Attribute Manager</option>
+              )}
+              {availableWorkflows.map((workflow) => (
+                <option key={workflow} value={workflow}>
+                  {workflow}
                 </option>
               ))}
             </select>
+            {availableWorkflows.length === 0 && (
+              <p className="mt-2 text-sm text-amber-600">
+                ⚠️ No workflows available. Go to Task Config Manager → Manage Attributes to add values.
+              </p>
+            )}
           </div>
 
           {/* User Name */}

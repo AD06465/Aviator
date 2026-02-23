@@ -11,6 +11,109 @@ import {
   DeviceDetails,
 } from '../types';
 
+/**
+ * Recursive workflow/job fetching and error extraction for Autopilot
+ */
+export class AutopilotWorkflowService {
+  /**
+   * Fetch workflow/job details by job ID
+   */
+  async fetchJobDetails(jobId: string): Promise<any> {
+    const url = `${jobId.startsWith('http') ? jobId : `https://usddclvapapp011-test.corp.intranet:3443/operations-manager/jobs/${jobId}`}`;
+    try {
+      const response = await axios.get(url);
+      return response.data.data;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Fetch task details by task ID
+   */
+  async fetchTaskDetails(taskId: string): Promise<any> {
+    const url = `https://usddclvapapp011-test.corp.intranet:3443/operations-manager/tasks/${taskId}`;
+    try {
+      const response = await axios.get(url);
+      return response.data.data;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  /**
+   * Recursively fetch child jobs for a workflow/job
+   */
+  async fetchWorkflowTree(jobId: string, depth = 0): Promise<any> {
+    const job = await this.fetchJobDetails(jobId);
+    if (!job) return null;
+
+    // Find child jobs from tasks with canvasName 'childJob'
+    const childJobs: any[] = [];
+    if (job.tasks) {
+      Object.values(job.tasks).forEach((task: any) => {
+        if (task.canvasName === 'childJob' && task.childJobs && Array.isArray(task.childJobs)) {
+          task.childJobs.forEach((child: any) => {
+            childJobs.push(child);
+          });
+        }
+      });
+    }
+
+    // Recursively fetch children
+    const children = await Promise.all(
+      childJobs.map(async (childJob: any) => {
+        return await this.fetchWorkflowTree(childJob._id, depth + 1);
+      })
+    );
+
+    return {
+      ...job,
+      children,
+      depth,
+    };
+  }
+
+  /**
+   * Fetch incoming/outgoing/error details for all tasks
+   */
+  async extractTaskDetails(job: any): Promise<any[]> {
+    const details: any[] = [];
+    if (job.tasks) {
+      for (const taskId in job.tasks) {
+        const task = job.tasks[taskId];
+        // Fetch details for all iterations
+        if (task.iterations && Array.isArray(task.iterations) && task.iterations.length > 0) {
+          for (const iterationId of task.iterations) {
+            const taskDetails = await this.fetchTaskDetails(iterationId);
+            details.push({
+              taskId: iterationId,
+              taskName: task.name,
+              incoming: taskDetails?.variables?.incoming,
+              outgoing: taskDetails?.variables?.outgoing,
+              error: taskDetails?.variables?.error,
+              status: taskDetails?.status,
+            });
+          }
+        } else {
+          // Fallback: fetch by taskId
+          const taskDetails = await this.fetchTaskDetails(taskId);
+          details.push({
+            taskId,
+            taskName: task.name,
+            incoming: taskDetails?.variables?.incoming,
+            outgoing: taskDetails?.variables?.outgoing,
+            error: taskDetails?.variables?.error,
+            status: taskDetails?.status,
+          });
+        }
+      }
+    }
+    return details;
+  }
+}
+
+export const autopilotWorkflowService = new AutopilotWorkflowService();
 class FlightDeckApiService {
   private api: AxiosInstance;
   private currentEnvironment: Environment;

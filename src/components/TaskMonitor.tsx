@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import WorkflowTree from './WorkflowTree';
 import { Task, ProcessingStatus, OrderForm, TaskFailureDetails } from '../types';
 import { formatTaskStatus, getStatusColor } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
@@ -285,7 +286,7 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
             <h3 className="text-xl font-bold text-gray-900">Task Monitor</h3>
             <p className="text-gray-600 mt-1">Real-time task processing status</p>
           </div>
-          
+
           <div className="flex items-center space-x-6">
             {processingStatus && processingStatus.isProcessing && (
               <div className="flex items-center space-x-2 text-blue-600">
@@ -293,7 +294,7 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
                 <span className="text-sm font-medium">Processing...</span>
               </div>
             )}
-            
+
             {/* Overall Progress */}
             <div className="text-right">
               <div className="text-2xl font-bold text-gray-900">
@@ -421,8 +422,31 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
         )}
       </div>
 
-      {/* Task List */}
+      {/* Workflow Hierarchy Tree */}
       <div className="p-6">
+        {/* Show impressive workflow tree UI for error analysis */}
+        {/* Parent workflow selection UI */}
+        {currentOrder && currentOrder.workflowJobId && (
+          <>
+            <div className="mb-4">
+              <label className="block text-sm font-semibold text-blue-900 mb-2">Select Parent Workflow:</label>
+              <select
+                className="border border-blue-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring focus:border-blue-500"
+                value={currentOrder.workflowJobId}
+                onChange={e => {
+                  // Optionally update parent workflow selection logic here
+                  // For now, just reload WorkflowTree with selected value
+                  // If you want to persist selection, add state
+                }}
+              >
+                {/* Example: populate with available workflows */}
+                <option value={currentOrder.workflowJobId}>{currentOrder.workflowJobId}</option>
+                {/* Add more options if you have a list of workflows */}
+              </select>
+            </div>
+            <WorkflowTree rootJobId={currentOrder.workflowJobId} />
+          </>
+        )}
         {/* Loading State */}
         {isSearchingTasks ? (
           <div className="text-center py-12">

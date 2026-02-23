@@ -12,6 +12,7 @@ export interface BackupData {
   version: string;
   devices: any[];
   taskConfig: any;
+  customAttributes?: any;
 }
 
 export interface BackupMetadata {
@@ -24,6 +25,7 @@ const BACKUP_STORAGE_KEY = 'aviator_backup_data';
 const BACKUP_METADATA_KEY = 'aviator_backup_metadata';
 const DEVICES_STORAGE_KEY = 'aviator_devices';
 const TASK_CONFIG_STORAGE_KEY = 'aviator-task-config';
+const CUSTOM_ATTRIBUTES_KEY = 'aviator-custom-attributes';
 const BACKUP_VERSION = '1.0.0';
 
 export class DataBackupManager {
@@ -33,12 +35,14 @@ export class DataBackupManager {
   static createBackup(): BackupData {
     const devicesData = localStorage.getItem(DEVICES_STORAGE_KEY);
     const taskConfigData = localStorage.getItem(TASK_CONFIG_STORAGE_KEY);
+    const customAttributesData = localStorage.getItem(CUSTOM_ATTRIBUTES_KEY);
 
     const backup: BackupData = {
       timestamp: new Date().toISOString(),
       version: BACKUP_VERSION,
       devices: devicesData ? JSON.parse(devicesData) : [],
       taskConfig: taskConfigData ? JSON.parse(taskConfigData) : null,
+      customAttributes: customAttributesData ? JSON.parse(customAttributesData) : null,
     };
 
     // Store backup in localStorage
@@ -51,6 +55,8 @@ export class DataBackupManager {
       component: 'DataBackupManager',
       timestamp: backup.timestamp,
       deviceCount: backup.devices.length,
+      hasTaskConfig: !!backup.taskConfig,
+      hasCustomAttributes: !!backup.customAttributes,
     });
 
     return backup;
@@ -85,6 +91,14 @@ export class DataBackupManager {
       if (backup.taskConfig) {
         localStorage.setItem(TASK_CONFIG_STORAGE_KEY, JSON.stringify(backup.taskConfig));
         logger.info('Task configuration restored from backup', {
+          component: 'DataBackupManager',
+        });
+      }
+
+      // Restore custom attributes
+      if (backup.customAttributes) {
+        localStorage.setItem(CUSTOM_ATTRIBUTES_KEY, JSON.stringify(backup.customAttributes));
+        logger.info('Custom attributes restored from backup', {
           component: 'DataBackupManager',
         });
       }

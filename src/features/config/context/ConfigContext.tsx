@@ -47,17 +47,20 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({ children }) => {
   const setTaskConfig = useCallback((config: TaskManagementConfig) => {
     setTaskConfigState(config);
     try {
-      // Preserve conditionalRules when saving
+      // Preserve conditionalRules and taskSequencing when saving
       const saved = localStorage.getItem('aviator-task-config');
       let existingRules = {};
+      let existingTaskSequencing = {};
       if (saved) {
         const existing = JSON.parse(saved);
         existingRules = existing.conditionalRules || {};
+        existingTaskSequencing = existing.taskSequencing || {};
       }
       
       const configToSave = {
         ...config,
-        conditionalRules: config.conditionalRules || existingRules
+        conditionalRules: config.conditionalRules || existingRules,
+        taskSequencing: config.taskSequencing || existingTaskSequencing
       };
       
       localStorage.setItem('aviator-task-config', JSON.stringify(configToSave));
@@ -78,17 +81,20 @@ export const ConfigProvider: React.FC<ConfigProviderProps> = ({ children }) => {
     setTaskConfigState(prev => {
       const updated = { ...prev, ...updates };
       try {
-        // Preserve conditionalRules when doing partial updates
+        // Preserve conditionalRules and taskSequencing when doing partial updates
         const saved = localStorage.getItem('aviator-task-config');
         let existingRules = {};
+        let existingTaskSequencing = {};
         if (saved) {
           const existing = JSON.parse(saved);
           existingRules = existing.conditionalRules || {};
+          existingTaskSequencing = existing.taskSequencing || {};
         }
         
         const configToSave = {
           ...updated,
-          conditionalRules: updated.conditionalRules || existingRules
+          conditionalRules: updated.conditionalRules || existingRules,
+          taskSequencing: updated.taskSequencing || existingTaskSequencing
         };
         
         localStorage.setItem('aviator-task-config', JSON.stringify(configToSave));

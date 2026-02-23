@@ -5,3 +5,4 @@
 export * from './environments';
 export * from './tasks';
 export * from './devices';
+export * from './autopilot';

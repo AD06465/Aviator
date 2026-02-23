@@ -1,0 +1,90 @@
+{
+  "completableTasks": [
+    "Confirm/Schedule Activation",
+    "Service Validate Field",
+    "Service Validate - UNI (Tester)",
+    "Service Validate Ethernet",
+    "Send Completion Details",
+    "Verify or Assign Appropriate Device",
+    "LOA Designate Tid and Port",
+    "LOA Verification",
+    "BE Installation Scheduled Date: BE completion notice"
+  ],
+  "retryableTasks": [
+    "Get Details from MESH",
+    "Create Uni in ASRI",
+    "Activate UNI in ACT",
+    "Update Uni in ASRI",
+    "Activate Path in ACT"
+  ],
+  "taskFieldMappings": {
+    "Service Validate - UNI (Tester)": {
+      "Demarc_Information*": "Test"
+    },
+    "Verify or Assign Appropriate Device": {
+      "Fallout Action": "Enter Port Data",
+      "Device: *": "{{preferredDevice}}",
+      "Port: *": "{{preferredPort}}"
+    },
+    "LOA Designate Tid and Port": {
+      "TID*": "{{preferredDevice}}",
+      "Port (eg: GigabitEthernet0/0/23)": "{{preferredPort}}",
+      "Demarc Location": "TEST"
+    },
+    "LOA Verification": {
+      "Demarc Location": "TEST"
+    }
+  },
+  "conditionalRules": {
+    "Verify or Assign Appropriate Device": [
+      {
+        "id": "rule-colorless",
+        "conditionType": "workflow",
+        "conditionValue": "Colorless",
+        "fields": [
+          {
+            "fieldName": "Fallout Action:",
+            "fieldValue": "Create Cap Jeop",
+            "fieldType": "dropdown"
+          }
+        ]
+      }
+    ]
+  },
+  "taskSequencing": {
+    "Get Details from MESH": {
+      "priority": 1
+    },
+    "Create Uni in ASRI": {
+      "priority": 2,
+      "dependsOn": ["Get Details from MESH"],
+      "delayAfter": 15
+    },
+    "Verify or Assign Appropriate Device": {
+      "priority": 3,
+      "dependsOn": ["Create Uni in ASRI"]
+    },
+    "LOA Designate Tid and Port": {
+      "priority": 4,
+      "dependsOn": ["Verify or Assign Appropriate Device"]
+    },
+    "Service Validate - UNI (Tester)": {
+      "priority": 5,
+      "dependsOn": ["LOA Designate Tid and Port"]
+    },
+    "BE Installation Scheduled Date: BE completion notice": {
+      "priority": 6,
+      "dependsOn": ["Service Validate - UNI (Tester)"],
+      "waitForCompletion": true,
+      "delayAfter": 120
+    },
+    "Confirm/Schedule Activation": {
+      "priority": 7,
+      "dependsOn": ["BE Installation Scheduled Date: BE completion notice"]
+    },
+    "Send Completion Details": {
+      "priority": 8,
+      "dependsOn": ["Confirm/Schedule Activation"]
+    }
+  }
+}

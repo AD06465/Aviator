@@ -362,10 +362,20 @@ export default function DeviceManager({
         if (!resource.pathElements) continue;
         
         for (const pathElement of resource.pathElements) {
+          // Check if this is a "New_NID" type - means no available device/port
+          if (pathElement.type === 'New_NID') {
+            setPortFetchError('⚠️ New NID Required: MESH indicates that a new NID device installation is required at this location. No existing device/port is available. Please coordinate with provisioning team for new device installation.');
+            setAvailablePorts([]);
+            return;
+          }
+          
           if (!pathElement.subElements) continue;
           
           for (const subElement of pathElement.subElements) {
-            if (subElement.aendPort) {
+            // Verify this subElement is for the requested device
+            const deviceNameMatch = subElement.name === selectedDevice;
+            
+            if (subElement.aendPort && deviceNameMatch) {
               const aendPort = subElement.aendPort;
               
               // Extract portSysId from attributes
@@ -414,10 +424,19 @@ export default function DeviceManager({
       console.log('🔍 Total ports found:', ports.length);
 
       if (ports.length > 0) {
-        setAvailablePorts(ports);
-        // Auto-fill the first port
-        onPortChange(ports[0].name);
-        setPortFetchError(`✅ Found ${ports.length} available port(s)`);
+        // Check if the port class is "Empty Slot"
+        const firstPort = ports[0];
+        if (firstPort.class && firstPort.class.toLowerCase().includes('empty slot')) {
+          setAvailablePorts(ports);
+          setPortFetchError(`ℹ️ Note: Port "${firstPort.name}" is an Empty Slot (not a physical port). This is a slot placeholder and cannot be used directly as a PORT. Please enter the actual physical port manually.`);
+          // Don't auto-fill the port field for empty slots
+          onPortChange('');
+        } else {
+          setAvailablePorts(ports);
+          // Auto-fill the first port only if it's a valid physical port
+          onPortChange(firstPort.name);
+          setPortFetchError(`✅ Found ${ports.length} available port(s)`);
+        }
       } else {
         setPortFetchError('❌ Could not extract port information from response');
       }
