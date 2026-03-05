@@ -213,19 +213,19 @@ export default function MultiDevicePortManager({
         className="flex justify-between items-center p-4 cursor-pointer hover:bg-purple-100 transition-colors"
         onClick={() => setShowManager(!showManager)}
       >
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">{showManager ? '📂' : '📁'}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xl">{showManager ? '📂' : '📁'}</span>
           <div>
-            <h3 className="text-lg font-bold text-purple-900 flex items-center gap-2">
+            <h3 className="text-base font-semibold text-purple-900 flex items-center gap-2">
               <span>🔀</span>
               Multi-Device/Port Manager
               {devicePortPairs.length > 0 && (
-                <span className="text-sm bg-purple-600 text-white px-2 py-0.5 rounded-full">
+                <span className="text-xs bg-purple-600 text-white px-2 py-0.5 rounded-full">
                   {devicePortPairs.length} configured
                 </span>
               )}
             </h3>
-            <p className="text-sm text-purple-700 mt-0.5">
+            <p className="text-xs text-purple-700 mt-0.5">
               {showManager
                 ? 'Click to collapse'
                 : `Click to expand and configure device/port pairs${devicePortPairs.length > 0 ? ` • ${devicePortPairs.length} pair(s) configured` : ''}`}

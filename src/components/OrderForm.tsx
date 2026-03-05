@@ -4,6 +4,7 @@ import { workflowTypes, defaultDevices } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
 import DeviceManager from './DeviceManager';
 import MultiDevicePortManager from './MultiDevicePortManager';
+import PortAvailabilityChecker from './PortAvailabilityChecker';
 
 interface OrderFormProps {
   onSubmit: (orderForm: OrderForm) => void;
@@ -864,6 +865,11 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
             setFormData(prev => ({ ...prev, devicePortPairs: pairs }));
           }}
           initialPairs={formData.devicePortPairs || []}
+        />
+
+        {/* Port Availability Checker */}
+        <PortAvailabilityChecker
+          environment={formData.environment}
         />
 
         {/* Submit Button */}
