@@ -6,7 +6,8 @@ import { AutopilotWorkflow, AutopilotWorkflowsResponse } from '@/types';
  */
 export async function fetchAutopilotWorkflows(
   environment: string,
-  orderNumber: string
+  orderNumber: string,
+  includeChildren: boolean = true
 ): Promise<AutopilotWorkflow[]> {
   try {
     console.log(`🚀 Starting Autopilot API call - Order: ${orderNumber}, Env: ${environment}`);
@@ -19,6 +20,7 @@ export async function fetchAutopilotWorkflows(
       body: JSON.stringify({
         environment,
         orderNumber,
+        includeChildren,
       }),
     });
 
@@ -109,4 +111,140 @@ export function calculateWorkflowDuration(startTime?: number, endTime?: number):
   } else {
     return `${seconds}s`;
   }
+}
+
+/**
+ * Fetch detailed workflow information including child jobs and tasks
+ */
+export async function fetchWorkflowDetails(
+  environment: string,
+  jobId: string
+): Promise<any> {
+  try {
+    console.log(`🔍 Fetching workflow details for job: ${jobId}`);
+    
+    const response = await fetch('/api/autopilot/workflow-details', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        environment,
+        jobId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || 'Failed to fetch workflow details');
+    }
+
+    const data = await response.json();
+    console.log(`✅ Fetched workflow details for ${jobId}:`, data);
+    return data;
+  } catch (error) {
+    console.error(`❌ Error fetching workflow details for ${jobId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch task details including incoming/outgoing/error data
+ */
+export async function fetchTaskDetails(
+  environment: string,
+  taskId: string
+): Promise<any> {
+  try {
+    console.log(`🔍 Fetching task details for: ${taskId}`);
+    
+    const response = await fetch('/api/autopilot/task-details', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        environment,
+        taskId,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(errorData.error || 'Failed to fetch task details');
+    }
+
+    const data = await response.json();
+    console.log(`✅ Fetched task details for ${taskId}:`, data);
+    return data;
+  } catch (error) {
+    console.error(`❌ Error fetching task details for ${taskId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Build workflow hierarchy tree recursively
+ */
+export async function buildWorkflowHierarchy(
+  environment: string,
+  rootJobId: string,
+  maxDepth: number = 10
+): Promise<any> {
+  const visited = new Set<string>();
+  
+  async function buildNode(jobId: string, depth: number = 0): Promise<any> {
+    // Prevent infinite recursion and circular dependencies
+    if (depth >= maxDepth || visited.has(jobId)) {
+      return null;
+    }
+    
+    visited.add(jobId);
+    
+    try {
+      const workflowDetails = await fetchWorkflowDetails(environment, jobId);
+      
+      if (!workflowDetails || !workflowDetails.data) {
+        return null;
+      }
+      
+      const { data } = workflowDetails;
+      
+      // Extract child jobs from tasks
+      const childJobs: Array<{ _id: string; name: string; iteration: number }> = [];
+      
+      if (data.tasks) {
+        Object.values(data.tasks).forEach((task: any) => {
+          if (task.childJobs && Array.isArray(task.childJobs)) {
+            childJobs.push(...task.childJobs);
+          }
+        });
+      }
+      
+      console.log(`📊 Job ${jobId} (${data.name}): Found ${childJobs.length} child jobs at depth ${depth}`, 
+        childJobs.map(c => ({ id: c._id, name: c.name }))
+      );
+      
+      // Build child nodes recursively
+      const children = await Promise.all(
+        childJobs.map(child => buildNode(child._id, depth + 1))
+      );
+      
+      return {
+        _id: data._id,
+        name: data.name,
+        status: data.status,
+        description: data.description,
+        tasks: data.tasks,
+        childJobs,
+        children: children.filter(Boolean),
+        metrics: data.metrics,
+      };
+    } catch (error) {
+      console.error(`Error building node for ${jobId}:`, error);
+      return null;
+    }
+  }
+  
+  return buildNode(rootJobId);
 }

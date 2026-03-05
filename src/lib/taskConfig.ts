@@ -16,15 +16,208 @@ export const processDatePlaceholder = (value: string): string | null => {
   const date = new Date();
   date.setDate(date.getDate() + offset);
   
-  // Format as YYYY-MM-DD
+  // Format as YYYY-MM-DD (required for date picker fields)
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   
   const formattedDate = `${year}-${month}-${day}`;
-  console.log(`📅 Date placeholder "${value}" resolved to: ${formattedDate} (offset: ${offset} days)`);
+  console.log(`📅 Date placeholder "${value}" resolved to: ${formattedDate} (offset: ${offset} days, for date picker field)`);
   
   return formattedDate;
+};
+
+/**
+ * Generate random string with specified character set
+ */
+const generateRandomString = (length: number, charset = 'ALPHANUMERIC'): string => {
+  let chars = '';
+  switch (charset) {
+    case 'ALPHA':
+      chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      break;
+    case 'NUMERIC':
+      chars = '0123456789';
+      break;
+    case 'HEX':
+      chars = '0123456789ABCDEF';
+      break;
+    case 'ALPHANUMERIC':
+    default:
+      chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  }
+  
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
+
+/**
+ * Generate UUID v4
+ */
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+/**
+ * Format date with pattern
+ */
+const formatDate = (pattern: string): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const seconds = String(now.getSeconds()).padStart(2, '0');
+  
+  return pattern
+    .replace(/YYYY/g, String(year))
+    .replace(/YY/g, String(year).slice(-2))
+    .replace(/MM/g, month)
+    .replace(/DD/g, day)
+    .replace(/HH/g, hours)
+    .replace(/mm/g, minutes)
+    .replace(/ss/g, seconds);
+};
+
+/**
+ * Counter for generating sequential IDs
+ */
+let globalCounter = 0;
+
+/**
+ * Process custom value placeholders - supports ANY combination of static and dynamic parts:
+ * 
+ * BASIC RANDOM:
+ * - {{random:N}} - N random alphanumeric chars (A-Z, 0-9)
+ * - {{randomAlpha:N}} - N random letters only (A-Z)
+ * - {{randomNum:N}} - N random numbers only (0-9)
+ * - {{randomHex:N}} - N random hex chars (0-9, A-F)
+ * 
+ * COUNTERS:
+ * - {{counter:N}} - N-digit sequential counter (0001, 0002...)
+ * - {{uniqueId:N}} - N-char unique ID (timestamp-based)
+ * 
+ * DATE/TIME:
+ * - {{date:YYYYMMDD}} - Date format (20260228)
+ * - {{date:YYMMDD}} - Short date (260228)
+ * - {{date:MMDD}} - Month-day (0228)
+ * - {{date:YYYY-MM-DD}} - ISO date (2026-02-28)
+ * - {{time:HHmmss}} - Time (143025)
+ * - {{time:HHmm}} - Hour-min (1430)
+ * 
+ * UNIQUE IDs:
+ * - {{uuid}} - Full UUID (550e8400-e29b-41d4-a716-446655440000)
+ * - {{guid}} - Short GUID (8 chars)
+ * - {{timestamp}} - Unix timestamp (1709164800000)
+ * 
+ * EXAMPLES:
+ * - "PREFIX{{random:3}}" -> "PREFIXABC" (static prefix, dynamic suffix)
+ * - "{{random:3}}SUFFIX" -> "ABCSUFFIX" (dynamic prefix, static suffix)
+ * - "PRE{{random:2}}MID{{counter:3}}POST" -> "PREABMID001POST" (mixed)
+ * - "ORDER-{{date:YYYYMMDD}}-{{random:4}}" -> "ORDER-20260228-A7X9"
+ */
+export const processCustomPlaceholders = (value: string): string => {
+  let processed = value;
+  
+  // Process {{random:N}} - Alphanumeric
+  processed = processed.replace(/\{\{random:(\d+)\}\}/g, (match, length) => {
+    const len = parseInt(length);
+    const randomStr = generateRandomString(len, 'ALPHANUMERIC');
+    console.log(`🎲 Random(alphanum) "${match}" = ${randomStr}`);
+    return randomStr;
+  });
+  
+  // Process {{randomAlpha:N}} - Letters only
+  processed = processed.replace(/\{\{randomAlpha:(\d+)\}\}/g, (match, length) => {
+    const len = parseInt(length);
+    const randomStr = generateRandomString(len, 'ALPHA');
+    console.log(`🎲 Random(alpha) "${match}" = ${randomStr}`);
+    return randomStr;
+  });
+  
+  // Process {{randomNum:N}} - Numbers only
+  processed = processed.replace(/\{\{randomNum:(\d+)\}\}/g, (match, length) => {
+    const len = parseInt(length);
+    const randomStr = generateRandomString(len, 'NUMERIC');
+    console.log(`🎲 Random(numeric) "${match}" = ${randomStr}`);
+    return randomStr;
+  });
+  
+  // Process {{randomHex:N}} - Hexadecimal
+  processed = processed.replace(/\{\{randomHex:(\d+)\}\}/g, (match, length) => {
+    const len = parseInt(length);
+    const randomStr = generateRandomString(len, 'HEX');
+    console.log(`🎲 Random(hex) "${match}" = ${randomStr}`);
+    return randomStr;
+  });
+  
+  // Process {{counter:N}} - Sequential counter
+  processed = processed.replace(/\{\{counter:(\d+)\}\}/g, (match, length) => {
+    globalCounter++;
+    const len = parseInt(length);
+    const counterStr = String(globalCounter).padStart(len, '0');
+    console.log(`🔢 Counter "${match}" = ${counterStr} (count: ${globalCounter})`);
+    return counterStr;
+  });
+  
+  // Process {{uniqueId:N}} - Timestamp-based unique ID
+  processed = processed.replace(/\{\{uniqueId:(\d+)\}\}/g, (match, length) => {
+    const len = parseInt(length);
+    const timestamp = Date.now().toString(36);
+    const random = generateRandomString(Math.max(1, len - timestamp.length), 'ALPHANUMERIC');
+    const uniqueId = (timestamp + random).substring(0, len).toUpperCase();
+    console.log(`🆔 UniqueId "${match}" = ${uniqueId}`);
+    return uniqueId;
+  });
+  
+  // Process {{date:FORMAT}} - Date formatting
+  processed = processed.replace(/\{\{date:([^}]+)\}\}/g, (match, pattern) => {
+    const formatted = formatDate(pattern);
+    console.log(`📅 Date "${match}" = ${formatted}`);
+    return formatted;
+  });
+  
+  // Process {{time:FORMAT}} - Time formatting
+  processed = processed.replace(/\{\{time:([^}]+)\}\}/g, (match, pattern) => {
+    const formatted = formatDate(pattern);
+    console.log(`⏰ Time "${match}" = ${formatted}`);
+    return formatted;
+  });
+  
+  // Process {{uuid}} - Full UUID
+  processed = processed.replace(/\{\{uuid\}\}/g, () => {
+    const uuid = generateUUID();
+    console.log(`🔑 UUID generated: ${uuid}`);
+    return uuid;
+  });
+  
+  // Process {{guid}} - Short GUID (8 chars)
+  processed = processed.replace(/\{\{guid\}\}/g, () => {
+    const guid = generateRandomString(8, 'HEX');
+    console.log(`🔑 GUID generated: ${guid}`);
+    return guid;
+  });
+  
+  // Process {{timestamp}} - Unix timestamp
+  processed = processed.replace(/\{\{timestamp\}\}/g, () => {
+    const timestamp = Date.now().toString();
+    console.log(`⏰ Timestamp: ${timestamp}`);
+    return timestamp;
+  });
+  
+  if (processed !== value) {
+    console.log(`✨ Custom value: "${value}" → "${processed}"`);
+  }
+  
+  return processed;
 };
 
 export const defaultTaskConfig: TaskManagementConfig = {
@@ -108,12 +301,25 @@ export const workflowTypes = [
  */
 export const getTaskPriority = (taskName: string, config?: TaskManagementConfig): number => {
   const trimmedTaskName = taskName.trim();
+  
   // Check if task has priority defined in task sequencing config
+  // Try exact match first, then try trimmed keys for robustness
   if (config?.taskSequencing?.[trimmedTaskName]?.priority !== undefined) {
     return config.taskSequencing[trimmedTaskName].priority!;
   }
   
+  // Fallback: Try to find with trimmed keys (handles cases where config has extra spaces)
+  if (config?.taskSequencing) {
+    for (const [key, value] of Object.entries(config.taskSequencing)) {
+      if (key.trim() === trimmedTaskName && value.priority !== undefined) {
+        console.log(`⚠️ Found priority for "${trimmedTaskName}" but config key has extra spaces: "${key}"`);
+        return value.priority!;
+      }
+    }
+  }
+  
   // Default priority for tasks without explicit configuration
+  console.log(`⚠️ No priority found for "${trimmedTaskName}", using default 999`);
   return 999;
 };
 
@@ -140,7 +346,17 @@ export const areTaskDependenciesMet = (
   allTaskNames?: string[]
 ): boolean => {
   const trimmedTaskName = taskName.trim();
-  const sequencing = config.taskSequencing?.[trimmedTaskName];
+  let sequencing = config.taskSequencing?.[trimmedTaskName];
+  
+  // Fallback: Try to find with trimmed keys if not found
+  if (!sequencing && config?.taskSequencing) {
+    for (const [key, value] of Object.entries(config.taskSequencing)) {
+      if (key.trim() === trimmedTaskName) {
+        sequencing = value;
+        break;
+      }
+    }
+  }
   
   // If no dependencies defined, task is ready
   if (!sequencing?.dependsOn || sequencing.dependsOn.length === 0) {
@@ -186,7 +402,19 @@ export const areTaskDependenciesMet = (
  */
 export const shouldWaitForTask = (taskName: string, config: TaskManagementConfig): boolean => {
   const trimmedTaskName = taskName.trim();
-  return config.taskSequencing?.[trimmedTaskName]?.waitForCompletion === true;
+  let sequencing = config.taskSequencing?.[trimmedTaskName];
+  
+  // Fallback: Try to find with trimmed keys if not found
+  if (!sequencing && config?.taskSequencing) {
+    for (const [key, value] of Object.entries(config.taskSequencing)) {
+      if (key.trim() === trimmedTaskName) {
+        sequencing = value;
+        break;
+      }
+    }
+  }
+  
+  return sequencing?.waitForCompletion === true;
 };
 
 /**
@@ -194,9 +422,24 @@ export const shouldWaitForTask = (taskName: string, config: TaskManagementConfig
  */
 export const getDelayAfterTask = (taskName: string, config: TaskManagementConfig): number => {
   const trimmedTaskName = taskName.trim();
-  const delaySeconds = config.taskSequencing?.[trimmedTaskName]?.delayAfter || 0;
+  let sequencing = config.taskSequencing?.[trimmedTaskName];
+  
+  // Fallback: Try to find with trimmed keys if not found
+  if (!sequencing && config?.taskSequencing) {
+    for (const [key, value] of Object.entries(config.taskSequencing)) {
+      if (key.trim() === trimmedTaskName) {
+        sequencing = value;
+        break;
+      }
+    }
+  }
+  
+  const delaySeconds = sequencing?.delayAfter || 0;
   return delaySeconds * 1000; // Convert to milliseconds
 };
+
+// Cache for label-to-field-name mappings to prevent excessive lookups
+const labelMappingCache = new Map<string, string>();
 
 /**
  * Maps field labels to field names using task parameter information
@@ -205,11 +448,18 @@ export const getDelayAfterTask = (taskName: string, config: TaskManagementConfig
 export const mapLabelToFieldName = (
   taskName: string,
   labelOrName: string,
-  taskDetails?: any
+  taskDetails?: any,
+  enableLogging: boolean = false
 ): string => {
   // If no task details provided, return the original value (assume it's a field name)
   if (!taskDetails?.taskInstParamRequestList) {
     return labelOrName;
+  }
+
+  // Check cache first
+  const cacheKey = `${taskName}:${labelOrName}`;
+  if (labelMappingCache.has(cacheKey)) {
+    return labelMappingCache.get(cacheKey)!;
   }
 
   // First, check if the provided value is already a valid field name
@@ -217,7 +467,8 @@ export const mapLabelToFieldName = (
     (param: any) => param.name === labelOrName
   );
   if (directMatch) {
-    console.log(`🎯 Direct field name match: "${labelOrName}"`);
+    if (enableLogging) console.log(`🎯 Direct field name match: "${labelOrName}"`);
+    labelMappingCache.set(cacheKey, labelOrName);
     return labelOrName;
   }
 
@@ -233,7 +484,8 @@ export const mapLabelToFieldName = (
   );
 
   if (labelMatch) {
-    console.log(`🏷️ Label to field name mapping: "${labelOrName}" → "${labelMatch.name}"`);
+    if (enableLogging) console.log(`🏷️ Label to field name mapping: "${labelOrName}" → "${labelMatch.name}"`);
+    labelMappingCache.set(cacheKey, labelMatch.name);
     return labelMatch.name;
   }
 
@@ -251,18 +503,26 @@ export const mapLabelToFieldName = (
   );
 
   if (partialMatch) {
-    console.log(`🔍 Partial label match: "${labelOrName}" → "${partialMatch.name}"`);
+    if (enableLogging) console.log(`🔍 Partial label match: "${labelOrName}" → "${partialMatch.name}"`);
+    labelMappingCache.set(cacheKey, partialMatch.name);
     return partialMatch.name;
   }
 
-  // If no match found, log available options and return original
-  console.warn(`⚠️ No field found for "${labelOrName}". Available fields:`);
-  taskDetails.taskInstParamRequestList.forEach((param: any) => {
-    const label = param.jsonDescriptorObject?.label || 'No label';
-    console.warn(`   - Name: "${param.name}" | Label: "${label}"`);
-  });
-
+  // If no match found, return original (only log on first miss, cache to prevent repeat warnings)
+  if (enableLogging) {
+    console.warn(`⚠️ No field found for "${labelOrName}" in task "${taskName}"`);
+  }
+  labelMappingCache.set(cacheKey, labelOrName);
   return labelOrName; // Return original if no mapping found
+};
+
+/**
+ * Clear the label-to-field-name mapping cache
+ * Call this when starting new task processing to ensure fresh mappings
+ */
+export const clearLabelMappingCache = () => {
+  labelMappingCache.clear();
+  console.log('🔄 Label mapping cache cleared');
 };
 
 export const getTaskFieldValue = (
@@ -270,13 +530,33 @@ export const getTaskFieldValue = (
   fieldName: string,
   config: TaskManagementConfig,
   orderForm: any,
-  taskDetails?: any
+  taskDetails?: any,
+  taskInstanceNumber?: number
 ): string => {
   const trimmedTaskName = taskName.trim();
-  const mapping = config.taskFieldMappings[trimmedTaskName];
   
-  // Check for conditional rules first
-  const conditionalRules = (config as any).conditionalRules?.[trimmedTaskName];
+  // Try to get field mappings - exact match first, then fallback to trimmed keys
+  let mapping = config.taskFieldMappings[trimmedTaskName];
+  if (!mapping && config.taskFieldMappings) {
+    for (const [key, value] of Object.entries(config.taskFieldMappings)) {
+      if (key.trim() === trimmedTaskName) {
+        console.log(`⚠️ Found field mappings but config key has extra spaces: "${key}"`);
+        mapping = value;
+        break;
+      }
+    }
+  }
+  
+  // Check for conditional rules first - exact match first, then fallback to trimmed keys
+  let conditionalRules = (config as any).conditionalRules?.[trimmedTaskName];
+  if (!conditionalRules && (config as any).conditionalRules) {
+    for (const [key, value] of Object.entries((config as any).conditionalRules)) {
+      if (key.trim() === trimmedTaskName) {
+        conditionalRules = value;
+        break;
+      }
+    }
+  }
   if (conditionalRules && Array.isArray(conditionalRules)) {
     for (const rule of conditionalRules) {
       let conditionMet = false;
@@ -304,6 +584,11 @@ export const getTaskFieldValue = (
           if (resolvedFieldName === fieldName || condField.fieldName === fieldName) {
             let value = condField.fieldValue;
             
+            // Trim the value if it's a string
+            if (typeof value === 'string') {
+              value = value.trim();
+            }
+            
             // Handle dropdown field type
             if (condField.fieldType === 'dropdown' && condField.dropdownValue) {
               console.log(`📋 Conditional dropdown "${fieldName}": "${condField.dropdownValue}" (label: "${value}")`);
@@ -321,10 +606,53 @@ export const getTaskFieldValue = (
             
             // Replace placeholders
             if (value === '{{preferredDevice}}') {
+              // Auto-assign from devicePortPairs if available
+              if (orderForm.devicePortPairs && orderForm.devicePortPairs.length > 0 && taskInstanceNumber) {
+                const pairIndex = taskInstanceNumber - 1; // Convert to zero-based index
+                if (orderForm.devicePortPairs[pairIndex]) {
+                  console.log(`🔀 Auto-assigned device for instance #${taskInstanceNumber}: ${orderForm.devicePortPairs[pairIndex].device}`);
+                  return orderForm.devicePortPairs[pairIndex].device || '';
+                }
+              }
               return orderForm.preferredDevice || '';
             }
             if (value === '{{preferredPort}}') {
+              // Auto-assign from devicePortPairs if available
+              if (orderForm.devicePortPairs && orderForm.devicePortPairs.length > 0 && taskInstanceNumber) {
+                const pairIndex = taskInstanceNumber - 1; // Convert to zero-based index
+                if (orderForm.devicePortPairs[pairIndex]) {
+                  console.log(`🔀 Auto-assigned port for instance #${taskInstanceNumber}: ${orderForm.devicePortPairs[pairIndex].port}`);
+                  return orderForm.devicePortPairs[pairIndex].port || '';
+                }
+              }
               return orderForm.preferredPort || '';
+            }
+            
+            // Handle numbered placeholders for multi-device/port pairs
+            // e.g., {{preferredDevice1}}, {{preferredPort2}}, etc.
+            const deviceMatch = value.match(/^{{preferredDevice(\d+)}}$/);
+            if (deviceMatch) {
+              const index = parseInt(deviceMatch[1]) - 1; // Convert to zero-based index
+              if (orderForm.devicePortPairs && orderForm.devicePortPairs[index]) {
+                return orderForm.devicePortPairs[index].device || '';
+              }
+              return '';
+            }
+            
+            const portMatch = value.match(/^{{preferredPort(\d+)}}$/);
+            if (portMatch) {
+              const index = parseInt(portMatch[1]) - 1; // Convert to zero-based index
+              if (orderForm.devicePortPairs && orderForm.devicePortPairs[index]) {
+                return orderForm.devicePortPairs[index].port || '';
+              }
+              return '';
+            }
+            
+            // Process custom value placeholders (random, counter, uniqueId, timestamp)
+            if (typeof value === 'string' && (value.includes('{{random:') || value.includes('{{counter:') || value.includes('{{uniqueId:') || value.includes('{{timestamp}}'))) {
+              const processedValue = processCustomPlaceholders(value);
+              console.log(`✨ Custom placeholder processed: "${value}" -> "${processedValue}"`);
+              return processedValue;
             }
             
             console.log(`✓ Conditional field "${fieldName}" = "${value}"`);
@@ -369,7 +697,7 @@ export const getTaskFieldValue = (
     
     // Handle date field type - if it's an object with date placeholder
     if (typeof value === 'object' && value.fieldType === 'date' && value.fieldValue) {
-      const dateValue = processDatePlaceholder(value.fieldValue);
+      const dateValue = processDatePlaceholder(value.fieldValue.trim());
       if (dateValue) {
         console.log(`📅 Date field "${fieldName}" = "${dateValue}" (from: "${value.fieldValue}")`);
         return dateValue;
@@ -380,6 +708,11 @@ export const getTaskFieldValue = (
     // If it's an object but not a dropdown/date, get the fieldValue property
     if (typeof value === 'object' && value.fieldValue) {
       value = value.fieldValue;
+    }
+
+    // Trim the value to remove leading/trailing whitespace
+    if (typeof value === 'string') {
+      value = value.trim();
     }
 
     // Handle date placeholders in string values
@@ -393,11 +726,54 @@ export const getTaskFieldValue = (
 
     // Replace placeholders with actual values
     if (value === '{{preferredDevice}}') {
+      // Auto-assign from devicePortPairs if available
+      if (orderForm.devicePortPairs && orderForm.devicePortPairs.length > 0 && taskInstanceNumber) {
+        const pairIndex = taskInstanceNumber - 1; // Convert to zero-based index
+        if (orderForm.devicePortPairs[pairIndex]) {
+          console.log(`🔀 Auto-assigned device for instance #${taskInstanceNumber}: ${orderForm.devicePortPairs[pairIndex].device}`);
+          return orderForm.devicePortPairs[pairIndex].device || '';
+        }
+      }
       return orderForm.preferredDevice || '';
     }
     
     if (value === '{{preferredPort}}') {
+      // Auto-assign from devicePortPairs if available
+      if (orderForm.devicePortPairs && orderForm.devicePortPairs.length > 0 && taskInstanceNumber) {
+        const pairIndex = taskInstanceNumber - 1; // Convert to zero-based index
+        if (orderForm.devicePortPairs[pairIndex]) {
+          console.log(`🔀 Auto-assigned port for instance #${taskInstanceNumber}: ${orderForm.devicePortPairs[pairIndex].port}`);
+          return orderForm.devicePortPairs[pairIndex].port || '';
+        }
+      }
       return orderForm.preferredPort || '';
+    }
+
+    // Handle numbered placeholders for multi-device/port pairs
+    // e.g., {{preferredDevice1}}, {{preferredPort2}}, etc.
+    if (typeof value === 'string') {
+      const deviceMatch = value.match(/^{{preferredDevice(\d+)}}$/);
+      if (deviceMatch) {
+        const index = parseInt(deviceMatch[1]) - 1; // Convert to zero-based index
+        if (orderForm.devicePortPairs && orderForm.devicePortPairs[index]) {
+          return orderForm.devicePortPairs[index].device || '';
+        }
+        return '';
+      }
+      
+      const portMatch = value.match(/^{{preferredPort(\d+)}}$/);
+      if (portMatch) {
+        const index = parseInt(portMatch[1]) - 1; // Convert to zero-based index  
+        if (orderForm.devicePortPairs && orderForm.devicePortPairs[index]) {
+          return orderForm.devicePortPairs[index].port || '';
+        }
+        return '';
+      }
+    }
+
+    // Process custom value placeholders (random, counter, uniqueId, timestamp)
+    if (typeof value === 'string' && (value.includes('{{random:') || value.includes('{{counter:') || value.includes('{{uniqueId:') || value.includes('{{timestamp}}'))) {
+      return processCustomPlaceholders(value);
     }
 
     if (value === '{{workflowBasedValue}}') {

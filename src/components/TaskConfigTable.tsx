@@ -27,8 +27,9 @@ const DEFAULT_PRODUCT_NAMES: string[] = ['DIA', 'ELINE', 'ELAN', 'ELYNK', 'IPVPN
 export interface TaskFieldMapping {
   fieldName: string;
   fieldValue: string;
-  fieldType?: 'text' | 'dropdown' | 'date';
+  fieldType?: 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox';
   dropdownValue?: string;
+  optionsList?: string[]; // For radio buttons
 }
 
 export interface ConditionalRule {
@@ -62,17 +63,21 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   });
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldValue, setNewFieldValue] = useState('');
-  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
+  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
   const [newDropdownValue, setNewDropdownValue] = useState('');
+  const [newFieldRadioOptions, setNewFieldRadioOptions] = useState<string[]>([]);
+  const [newFieldRadioOptionInput, setNewFieldRadioOptionInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
+  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
   const [editFieldName, setEditFieldName] = useState('');
   const [editFieldValue, setEditFieldValue] = useState('');
   const [editDropdownValue, setEditDropdownValue] = useState('');
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
+  const [editRadioOptions, setEditRadioOptions] = useState<string[]>([]);
+  const [editRadioOptionInput, setEditRadioOptionInput] = useState('');
 
   const [showConditionalRules, setShowConditionalRules] = useState<number | null>(null);
   const [newRuleConditionType, setNewRuleConditionType] = useState<'workflow' | 'orderType' | 'itentialWorkflow' | 'productName' | 'custom'>('workflow');
@@ -80,8 +85,10 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   const [newRuleFields, setNewRuleFields] = useState<TaskFieldMapping[]>([]);
   const [newRuleFieldName, setNewRuleFieldName] = useState('');
   const [newRuleFieldValue, setNewRuleFieldValue] = useState('');
-  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown' | 'date'>('text');
+  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
   const [newRuleDropdownValue, setNewRuleDropdownValue] = useState('');
+  const [newRuleRadioOptions, setNewRuleRadioOptions] = useState<string[]>([]);
+  const [newRuleRadioOptionInput, setNewRuleRadioOptionInput] = useState('');
 
   // Custom attribute management
   const [itentialWorkflows, setItentialWorkflows] = useState<string[]>(DEFAULT_ITENTIAL_WORKFLOWS);
@@ -94,6 +101,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   
   // Ref to prevent saveTasksToStorage from running during sequencing updates
   const isSequencingUpdate = useRef(false);
+
+  // Get current date in YYYY-MM-DD format for date field examples
+  const getCurrentDateExample = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
 
   useEffect(() => {
     loadTasksFromStorage();
@@ -415,33 +431,45 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   };
 
   const handleAddField = (taskIndex: number) => {
-    if (!editFieldName.trim() || !editFieldValue.trim()) {
+    if (!newFieldName.trim() || !newFieldValue.trim()) {
       alert('Please enter both field name and value');
       return;
     }
 
+    // Validate radio button has options
+    if (newFieldType === 'radio' && newFieldRadioOptions.length === 0) {
+      alert('Please add at least one option for the radio button');
+      return;
+    }
+
     const updatedTask = { ...tasks[taskIndex] };
-    if (updatedTask.fields.some(f => f.fieldName === editFieldName)) {
+    if (updatedTask.fields.some(f => f.fieldName === newFieldName)) {
       alert('A field with this name already exists for this task');
       return;
     }
 
     const newField: TaskFieldMapping = {
-      fieldName: editFieldName,
-      fieldValue: editFieldValue,
-      fieldType: editFieldType,
+      fieldName: newFieldName,
+      fieldValue: newFieldValue,
+      fieldType: newFieldType,
     };
     
-    if (editFieldType === 'dropdown' && editDropdownValue) {
-      newField.dropdownValue = editDropdownValue;
+    if (newFieldType === 'dropdown' && newDropdownValue) {
+      newField.dropdownValue = newDropdownValue;
+    }
+
+    if (newFieldType === 'radio' && newFieldRadioOptions.length > 0) {
+      newField.optionsList = newFieldRadioOptions;
     }
 
     updatedTask.fields.push(newField);
     handleUpdateTask(taskIndex, updatedTask);
-    setEditFieldName('');
-    setEditFieldValue('');
-    setEditDropdownValue('');
-    setEditFieldType('text');
+    setNewFieldName('');
+    setNewFieldValue('');
+    setNewDropdownValue('');
+    setNewFieldType('text');
+    setNewFieldRadioOptions([]);
+    setNewFieldRadioOptionInput('');
   };
 
   const handleEditField = (taskIndex: number, fieldIndex: number) => {
@@ -450,12 +478,20 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     setEditFieldValue(field.fieldValue);
     setEditFieldType(field.fieldType || 'text');
     setEditDropdownValue(field.dropdownValue || '');
+    setEditRadioOptions(field.optionsList || []);
+    setEditRadioOptionInput('');
     setEditingFieldIndex(fieldIndex);
   };
 
   const handleUpdateField = (taskIndex: number, fieldIndex: number) => {
     if (!editFieldName.trim() || !editFieldValue.trim()) {
       alert('Please enter both field name and value');
+      return;
+    }
+
+    // Validate radio button has at least one option
+    if (editFieldType === 'radio' && (!editRadioOptions || editRadioOptions.length === 0)) {
+      alert('Radio buttons must have at least one option');
       return;
     }
 
@@ -476,12 +512,18 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
       updatedField.dropdownValue = editDropdownValue;
     }
 
+    if (editFieldType === 'radio' && editRadioOptions) {
+      updatedField.optionsList = editRadioOptions;
+    }
+
     updatedTask.fields[fieldIndex] = updatedField;
     handleUpdateTask(taskIndex, updatedTask);
     setEditFieldName('');
     setEditFieldValue('');
     setEditDropdownValue('');
     setEditFieldType('text');
+    setEditRadioOptions([]);
+    setEditRadioOptionInput('');
     setEditingFieldIndex(null);
   };
 
@@ -490,6 +532,8 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     setEditFieldValue('');
     setEditDropdownValue('');
     setEditFieldType('text');
+    setEditRadioOptions([]);
+    setEditRadioOptionInput('');
     setEditingFieldIndex(null);
   };
 
@@ -502,6 +546,12 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   const handleAddFieldToRule = () => {
     if (!newRuleFieldName.trim() || !newRuleFieldValue.trim()) {
       alert('Please enter both field name and value');
+      return;
+    }
+
+    // Validate radio button has at least one option
+    if (newRuleFieldType === 'radio' && (!newRuleRadioOptions || newRuleRadioOptions.length === 0)) {
+      alert('Radio buttons must have at least one option');
       return;
     }
 
@@ -520,11 +570,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
       newField.dropdownValue = newRuleDropdownValue;
     }
 
+    if (newRuleFieldType === 'radio' && newRuleRadioOptions) {
+      newField.optionsList = newRuleRadioOptions;
+    }
+
     setNewRuleFields([...newRuleFields, newField]);
     setNewRuleFieldName('');
     setNewRuleFieldValue('');
     setNewRuleDropdownValue('');
     setNewRuleFieldType('text');
+    setNewRuleRadioOptions([]);
+    setNewRuleRadioOptionInput('');
   };
 
   const handleDeleteRuleField = (fieldIndex: number) => {
@@ -1105,12 +1161,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               <div className="flex gap-2">
                                                 <select
                                                   value={editFieldType}
-                                                  onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
+                                                  onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox')}
                                                   className="px-2 py-1 border rounded text-sm"
                                                 >
                                                   <option value="text">📝 Text</option>
                                                   <option value="dropdown">📋 Dropdown</option>
                                                   <option value="date">📅 Date</option>
+                                                  <option value="radio">🔘 Radio</option>
+                                                  <option value="checkbox">☑️ Checkbox</option>
                                                 </select>
                                                 <input
                                                   type="text"
@@ -1125,10 +1183,36 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                                   type="text"
                                                   value={editFieldValue}
                                                   onChange={(e) => setEditFieldValue(e.target.value)}
-                                                  placeholder="Value"
+                                                  placeholder="Field value OR pattern: PREFIX{{random:3}}, {{date:YYYYMMDD}}-{{randomAlpha:4}}"
+                                                  title="Enter field value (e.g., 'My Value') OR use pattern: PREFIX{{random:3}}, {{randomNum:4}}SUFFIX, ORD-{{date:YYYYMMDD}}-{{random:4}}, {{uuid}}"
                                                   className="w-full px-3 py-1 border rounded text-sm"
                                                 />
-                                              ) : (
+                                              ) : editFieldType === 'date' ? (
+                                                <>
+                                                  <input
+                                                    type="text"
+                                                    value={editFieldValue}
+                                                    onChange={(e) => setEditFieldValue(e.target.value)}
+                                                    placeholder="e.g., {{currentDate+7}}"
+                                                    title="Date placeholder"
+                                                    className="w-full px-3 py-1 border rounded text-sm mb-2"
+                                                  />
+                                                  <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2">
+                                                    <p className="text-xs text-blue-800">
+                                                      ℹ️ Date format: <span className="font-semibold">YYYY-MM-DD</span> (e.g., {getCurrentDateExample()})
+                                                    </p>
+                                                  </div>
+                                                </>
+                                              ) : editFieldType === 'checkbox' ? (
+                                                <input
+                                                  type="text"
+                                                  value={editFieldValue}
+                                                  onChange={(e) => setEditFieldValue(e.target.value)}
+                                                  placeholder="true or false"
+                                                  title="true or false"
+                                                  className="w-full px-3 py-1 border rounded text-sm"
+                                                />
+                                              ) : editFieldType === 'dropdown' ? (
                                                 <div className="flex gap-2">
                                                   <input
                                                     type="text"
@@ -1145,7 +1229,66 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                                     className="flex-1 px-3 py-1 border rounded text-sm"
                                                   />
                                                 </div>
-                                              )}
+                                              ) : editFieldType === 'radio' ? (
+                                                <div className="space-y-2">
+                                                  <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                                                    <p className="text-xs font-medium text-blue-900 mb-2">Radio Options:</p>
+                                                    {editRadioOptions.length > 0 ? (
+                                                      <div className="space-y-1 mb-2">
+                                                        {editRadioOptions.map((option, idx) => (
+                                                          <div key={idx} className="flex items-center gap-2 bg-white px-2 py-1 rounded text-xs">
+                                                            <span>{option}</span>
+                                                            <button
+                                                              onClick={() => setEditRadioOptions(editRadioOptions.filter((_, i) => i !== idx))}
+                                                              className="ml-auto text-red-600 hover:text-red-800"
+                                                            >
+                                                              ✕
+                                                            </button>
+                                                          </div>
+                                                        ))}
+                                                      </div>
+                                                    ) : (
+                                                      <p className="text-xs text-gray-500 mb-2">No options added yet</p>
+                                                    )}
+                                                    <div className="flex gap-1">
+                                                      <input
+                                                        type="text"
+                                                        value={editRadioOptionInput}
+                                                        onChange={(e) => setEditRadioOptionInput(e.target.value)}
+                                                        placeholder="Add option"
+                                                        className="flex-1 px-2 py-1 border rounded text-xs"
+                                                        onKeyPress={(e) => {
+                                                          if (e.key === 'Enter' && editRadioOptionInput.trim()) {
+                                                            setEditRadioOptions([...editRadioOptions, editRadioOptionInput.trim()]);
+                                                            setEditRadioOptionInput('');
+                                                          }
+                                                        }}
+                                                      />
+                                                      <button
+                                                        onClick={() => {
+                                                          if (editRadioOptionInput.trim() && !editRadioOptions.includes(editRadioOptionInput.trim())) {
+                                                            setEditRadioOptions([...editRadioOptions, editRadioOptionInput.trim()]);
+                                                            setEditRadioOptionInput('');
+                                                          }
+                                                        }}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                                      >
+                                                        +
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                  <select
+                                                    value={editFieldValue}
+                                                    onChange={(e) => setEditFieldValue(e.target.value)}
+                                                    className="w-full px-3 py-1 border rounded text-sm"
+                                                  >
+                                                    <option value="">Select default value...</option>
+                                                    {editRadioOptions.map((option, idx) => (
+                                                      <option key={idx} value={option}>{option}</option>
+                                                    ))}
+                                                  </select>
+                                                </div>
+                                              ) : null}
                                               <div className="flex gap-2">
                                                 <button
                                                   onClick={() => handleUpdateField(actualIndex, fieldIndex)}
@@ -1176,6 +1319,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               {field.fieldType === 'date' && (
                                                 <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-medium hover:bg-blue-200 transition-colors duration-200">📅 Date</span>
                                               )}
+                                              {field.fieldType === 'radio' && (
+                                                <>
+                                                  <span className="text-xs bg-indigo-100 text-indigo-800 px-2 py-1 rounded-full font-medium hover:bg-indigo-200 transition-colors duration-200">🔘 Radio</span>
+                                                  {field.optionsList && field.optionsList.length > 0 && (
+                                                    <span className="text-xs text-gray-500">({field.optionsList.join(', ')})</span>
+                                                  )}
+                                                </>
+                                              )}
+                                              {field.fieldType === 'checkbox' && (
+                                                <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium hover:bg-green-200 transition-colors duration-200">☑️ Checkbox</span>
+                                              )}
                                               <div className="ml-auto flex gap-1">
                                                 <button
                                                   onClick={() => handleEditField(actualIndex, fieldIndex)}
@@ -1202,80 +1356,214 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                       <p className="text-xs text-gray-600 font-medium">➕ Add New Field</p>
                                       <div className="group relative">
                                         <span className="text-blue-500 cursor-help text-xs">ℹ️</span>
-                                        <div className="absolute left-0 top-6 w-80 bg-gray-900 text-white text-xs rounded-lg p-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl">
+                                        <div className="absolute left-0 top-6 w-[500px] bg-gray-900 text-white text-xs rounded-lg p-4 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl max-h-[500px] overflow-y-auto">
                                           <p className="font-semibold mb-2">📝 Text Field:</p>
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Requested Due Date")</p>
-                                          <p className="mb-3">• <b>Value:</b> Text to set (can use {'{{placeholders}}'})</p>
+                                          <p className="mb-1">• <b>Value:</b> Enter field value OR use dynamic patterns:</p>
+                                          <p className="ml-4 mb-1 text-green-300">✓ Field Value: "Completed Successfully"</p>
+                                          <p className="ml-4 mb-1 text-green-300">✓ Field Value: "Test Value 123"</p>
+                                          <p className="ml-4 mb-1 text-yellow-300">✓ Pattern: "ORDER-{'{{random:4}}'}"</p>
+                                          <p className="ml-4 mb-3 text-yellow-300">✓ Pattern: "{'{{date:YYYYMMDD}}'}-TICKET"</p>
+                                          
                                           <p className="font-semibold mb-2">📋 Dropdown Field:</p>
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Fallout Action")</p>
                                           <p className="mb-1">• <b>Label:</b> What shows in dropdown (e.g., "Enter Port Data") <span className="text-green-300">✓ Required</span></p>
                                           <p className="mb-3">• <b>Value:</b> Optional - Only if different from Label</p>
+                                          
                                           <p className="font-semibold mb-2">📅 Date Field:</p>
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "FOC Date")</p>
                                           <p className="mb-1">• <b>Value:</b> Date placeholder:</p>
                                           <p className="ml-4 mb-1">- {'{{currentDate}}'} = Today</p>
                                           <p className="ml-4 mb-1">- {'{{currentDate+7}}'} = 7 days from now</p>
-                                          <p className="ml-4">- {'{{currentDate-3}}'} = 3 days ago</p>
+                                          <p className="ml-4 mb-3">- {'{{currentDate-3}}'} = 3 days ago</p>
+                                          
+                                          <p className="font-semibold mb-2">🔘 Radio Button:</p>
+                                          <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Activation Type")</p>
+                                          <p className="mb-1">• <b>Options:</b> Add all available choices (e.g., "Scheduled", "Unscheduled")</p>
+                                          <p className="mb-3">• <b>Value:</b> Select default from options list</p>
+                                          
+                                          <p className="font-semibold mb-2">☑️ Checkbox:</p>
+                                          <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Redesign Required?")</p>
+                                          <p className="mb-3">• <b>Value:</b> "true" or "false"</p>
+                                          
+                                          <div className="border-t border-gray-700 pt-2 mt-2">
+                                            <p className="font-semibold mb-2 text-yellow-300">✨ Custom/Unique Value Patterns (Optional):</p>
+                                            <p className="mb-1 text-gray-300">💡 <b className="text-white">Default:</b> Just enter field value (e.g., "Completed", "My Value")</p>
+                                            <p className="mb-2 text-gray-300">🚀 <b className="text-white">Advanced:</b> Use patterns below to generate unique/dynamic values:</p>
+                                            
+                                            <p className="text-green-300 font-semibold mt-2 mb-1">🎲 Random Values:</p>
+                                            <p className="ml-4 mb-1">• {'{{random:3}}'} = 3 random chars (A7X, B9K...)</p>
+                                            <p className="ml-4 mb-1">• {'{{randomAlpha:4}}'} = 4 letters only (ABCD, XYZW...)</p>
+                                            <p className="ml-4 mb-1">• {'{{randomNum:5}}'} = 5 numbers only (12345, 98765...)</p>
+                                            <p className="ml-4 mb-2">• {'{{randomHex:6}}'} = 6 hex chars (A1F3E7, 9B2C4D...)</p>
+                                            
+                                            <p className="text-purple-300 font-semibold mt-2 mb-1">🔢 Counters & IDs:</p>
+                                            <p className="ml-4 mb-1">• {'{{counter:4}}'} = 4-digit counter (0001, 0002, 0003...)</p>
+                                            <p className="ml-4 mb-1">• {'{{uniqueId:8}}'} = 8-char unique ID (L9X7K2M4...)</p>
+                                            <p className="ml-4 mb-1">• {'{{uuid}}'} = Full UUID (550e8400-e29b...)</p>
+                                            <p className="ml-4 mb-2">• {'{{guid}}'} = Short GUID (8 chars)</p>
+                                            
+                                            <p className="text-blue-300 font-semibold mt-2 mb-1">📅 Date/Time Formats:</p>
+                                            <p className="ml-4 mb-1">• {'{{date:YYYYMMDD}}'} = 20260228</p>
+                                            <p className="ml-4 mb-1">• {'{{date:YYYY-MM-DD}}'} = 2026-02-28</p>
+                                            <p className="ml-4 mb-1">• {'{{date:YYMMDD}}'} = 260228</p>
+                                            <p className="ml-4 mb-1">• {'{{time:HHmmss}}'} = 143025</p>
+                                            <p className="ml-4 mb-1">• {'{{time:HHmm}}'} = 1430</p>
+                                            <p className="ml-4 mb-2">• {'{{timestamp}}'} = 1709164800000</p>
+                                            
+                                            <p className="text-orange-300 font-semibold mt-2 mb-1">🎯 Pattern Examples:</p>
+                                            <p className="ml-4 mb-1 bg-gray-800 p-1 rounded">PREFIX{'{{random:3}}'} → PREFIXABC</p>
+                                            <p className="ml-4 mb-1 bg-gray-800 p-1 rounded">{'{{random:3}}'}SUFFIX → ABCSUFFIX</p>
+                                            <p className="ml-4 mb-1 bg-gray-800 p-1 rounded">ORD-{'{{date:YYYYMMDD}}'}-{'{{random:4}}'} → ORD-20260228-A7X9</p>
+                                            <p className="ml-4 mb-1 bg-gray-800 p-1 rounded">DNVFCOQE{'{{randomAlpha:3}}'} → DNVFCOQEABC</p>
+                                            <p className="ml-4 mb-1 bg-gray-800 p-1 rounded">ID{'{{counter:5}}'} → ID00001, ID00002...</p>
+                                            <p className="ml-4 mb-2 bg-gray-800 p-1 rounded">{'{{randomNum:4}}'}-TICKET → 1234-TICKET</p>
+                                            
+                                            <div className="bg-blue-900 bg-opacity-50 p-2 rounded mt-2">
+                                              <p className="text-white font-semibold mb-1">💡 Quick Reference:</p>
+                                              <p className="ml-2 mb-1">✓ Field Value: "Completed" (always same)</p>
+                                              <p className="ml-2">✓ Pattern: "REF{'{{random:4}}'}" (unique each time)</p>
+                                            </div>
+                                          </div>
+                                          
+                                          <p className="text-xs text-gray-400 mt-3 pt-2 border-t border-gray-700">Other: {'{{preferredDevice}}'}, {'{{preferredPort}}'}</p>
                                         </div>
                                       </div>
                                     </div>
                                     <div className="flex gap-2 mb-2">
                                       <select
-                                        value={editFieldType}
-                                        onChange={(e) => setEditFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
+                                        value={newFieldType}
+                                        onChange={(e) => setNewFieldType(e.target.value as 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox')}
                                         className="px-2 py-1 border rounded text-sm"
                                       >
                                         <option value="text">📝 Text</option>
                                         <option value="dropdown">📋 Dropdown</option>
                                         <option value="date">📅 Date</option>
+                                        <option value="radio">🔘 Radio</option>
+                                        <option value="checkbox">☑️ Checkbox</option>
                                       </select>
                                       <input
                                         type="text"
-                                        value={editFieldName}
-                                        onChange={(e) => setEditFieldName(e.target.value)}
+                                        value={newFieldName}
+                                        onChange={(e) => setNewFieldName(e.target.value)}
                                         placeholder="Field name"
                                         className="flex-1 px-3 py-1 border rounded text-sm"
                                         title="The field name in FlightDeck (e.g., 'Fallout Action', 'Requested Due Date')"
                                       />
                                     </div>
-                                    {editFieldType === 'text' ? (
+                                    {newFieldType === 'text' ? (
                                       <input
                                         type="text"
-                                        value={editFieldValue}
-                                        onChange={(e) => setEditFieldValue(e.target.value)}
-                                        placeholder="Value"
+                                        value={newFieldValue}
+                                        onChange={(e) => setNewFieldValue(e.target.value)}
+                                        placeholder="Field value OR pattern: PREFIX{{random:3}}, {{date:YYYYMMDD}}-{{randomAlpha:4}}"
                                         className="w-full px-3 py-1 border rounded text-sm mb-2"
-                                        title="The value to set for this field (can use placeholders like {{preferredDevice}})"
+                                        title="Enter field value (e.g., 'My Value') OR use pattern: PREFIX{{random:3}}, {{randomNum:4}}SUFFIX, ID{{counter:5}}, ORD-{{date:YYYYMMDD}}-{{random:4}}, {{uuid}}, {{preferredDevice}}"
                                       />
-                                    ) : editFieldType === 'date' ? (
+                                    ) : newFieldType === 'date' ? (
+                                      <>
+                                        <input
+                                          type="text"
+                                          value={newFieldValue}
+                                          onChange={(e) => setNewFieldValue(e.target.value)}
+                                          placeholder="e.g., {{currentDate+7}}"
+                                          className="w-full px-3 py-1 border rounded text-sm mb-2"
+                                          title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
+                                        />
+                                        <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 mb-2">
+                                          <p className="text-xs text-blue-800">
+                                            ℹ️ Date format: <span className="font-semibold">YYYY-MM-DD</span> (e.g., {getCurrentDateExample()})
+                                          </p>
+                                        </div>
+                                      </>
+                                    ) : newFieldType === 'checkbox' ? (
                                       <input
                                         type="text"
-                                        value={editFieldValue}
-                                        onChange={(e) => setEditFieldValue(e.target.value)}
-                                        placeholder="e.g., {{currentDate+7}}"
+                                        value={newFieldValue}
+                                        onChange={(e) => setNewFieldValue(e.target.value)}
+                                        placeholder="true or false"
                                         className="w-full px-3 py-1 border rounded text-sm mb-2"
-                                        title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
+                                        title="Checkbox value: true or false"
                                       />
-                                    ) : (
+                                    ) : newFieldType === 'dropdown' ? (
                                       <div className="flex gap-2 mb-2">
                                         <input
                                           type="text"
-                                          value={editFieldValue}
-                                          onChange={(e) => setEditFieldValue(e.target.value)}
+                                          value={newFieldValue}
+                                          onChange={(e) => setNewFieldValue(e.target.value)}
                                           placeholder="Label"
                                           className="flex-1 px-3 py-1 border rounded text-sm"
                                           title="The text shown in the dropdown (e.g., 'Enter Port Data')"
                                         />
                                         <input
                                           type="text"
-                                          value={editDropdownValue}
-                                          onChange={(e) => setEditDropdownValue(e.target.value)}
+                                          value={newDropdownValue}
+                                          onChange={(e) => setNewDropdownValue(e.target.value)}
                                           placeholder="Value (optional)"
                                           className="flex-1 px-3 py-1 border rounded text-sm"
                                           title="Optional - Leave empty to use Label as the value. Only specify if the internal value differs from display text."
                                         />
                                       </div>
-                                    )}
+                                    ) : newFieldType === 'radio' ? (
+                                      <div className="space-y-2 mb-2">
+                                        <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                                          <p className="text-xs font-medium text-blue-900 mb-2">Radio Options:</p>
+                                          {newFieldRadioOptions.length > 0 ? (
+                                            <div className="space-y-1 mb-2">
+                                              {newFieldRadioOptions.map((option, idx) => (
+                                                <div key={idx} className="flex items-center gap-2 bg-white px-2 py-1 rounded text-xs">
+                                                  <span>{option}</span>
+                                                  <button
+                                                    onClick={() => setNewFieldRadioOptions(newFieldRadioOptions.filter((_, i) => i !== idx))}
+                                                    className="ml-auto text-red-600 hover:text-red-800"
+                                                  >
+                                                    ✕
+                                                  </button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <p className="text-xs text-gray-500 mb-2">No options added yet</p>
+                                          )}
+                                          <div className="flex gap-1">
+                                            <input
+                                              type="text"
+                                              value={newFieldRadioOptionInput}
+                                              onChange={(e) => setNewFieldRadioOptionInput(e.target.value)}
+                                              placeholder="Add option"
+                                              className="flex-1 px-2 py-1 border rounded text-xs"
+                                              onKeyPress={(e) => {
+                                                if (e.key === 'Enter' && newFieldRadioOptionInput.trim()) {
+                                                  setNewFieldRadioOptions([...newFieldRadioOptions, newFieldRadioOptionInput.trim()]);
+                                                  setNewFieldRadioOptionInput('');
+                                                }
+                                              }}
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                if (newFieldRadioOptionInput.trim() && !newFieldRadioOptions.includes(newFieldRadioOptionInput.trim())) {
+                                                  setNewFieldRadioOptions([...newFieldRadioOptions, newFieldRadioOptionInput.trim()]);
+                                                  setNewFieldRadioOptionInput('');
+                                                }
+                                              }}
+                                              className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        </div>
+                                        <select
+                                          value={newFieldValue}
+                                          onChange={(e) => setNewFieldValue(e.target.value)}
+                                          className="w-full px-3 py-1 border rounded text-sm"
+                                        >
+                                          <option value="">Select default value...</option>
+                                          {newFieldRadioOptions.map((option, idx) => (
+                                            <option key={idx} value={option}>{option}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    ) : null}
                                     <button
                                       onClick={() => handleAddField(actualIndex)}
                                       disabled={editingFieldIndex !== null}
@@ -1464,6 +1752,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               {field.fieldType === 'date' && (
                                                 <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">📅</span>
                                               )}
+                                              {field.fieldType === 'radio' && (
+                                                <>
+                                                  <span className="text-xs bg-indigo-200 text-indigo-800 px-2 py-1 rounded-full">🔘</span>
+                                                  {field.optionsList && field.optionsList.length > 0 && (
+                                                    <span className="text-xs text-gray-500">({field.optionsList.join(', ')})</span>
+                                                  )}
+                                                </>
+                                              )}
+                                              {field.fieldType === 'checkbox' && (
+                                                <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">☑️</span>
+                                              )}
                                               <button
                                                 onClick={() => handleDeleteRuleField(idx)}
                                                 className="ml-auto px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 transform hover:scale-110 transition-all"
@@ -1480,12 +1779,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         <div className="flex gap-2 mb-2">
                                           <select
                                             value={newRuleFieldType}
-                                            onChange={(e) => setNewRuleFieldType(e.target.value as 'text' | 'dropdown' | 'date')}
+                                            onChange={(e) => setNewRuleFieldType(e.target.value as 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox')}
                                             className="px-2 py-1 border rounded-lg text-sm"
                                           >
                                             <option value="text">📝 Text</option>
                                             <option value="dropdown">📋 Dropdown</option>
                                             <option value="date">📅 Date</option>
+                                            <option value="radio">🔘 Radio</option>
+                                            <option value="checkbox">☑️ Checkbox</option>
                                           </select>
                                           <input
                                             type="text"
@@ -1501,20 +1802,36 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                             type="text"
                                             value={newRuleFieldValue}
                                             onChange={(e) => setNewRuleFieldValue(e.target.value)}
-                                            placeholder="Value"
+                                            placeholder="Field value OR pattern: PREFIX{{random:3}}, {{date:YYYYMMDD}}-{{randomAlpha:4}}"
                                             className="w-full px-3 py-1 border rounded-lg text-sm mb-2 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                                            title="The value to set for this field (can use placeholders like {{preferredDevice}})"
+                                            title="Enter field value (e.g., 'My Value') OR use pattern: PREFIX{{random:3}}, {{randomNum:4}}SUFFIX, ID{{counter:5}}, ORD-{{date:YYYYMMDD}}-{{random:4}}, {{uuid}}"
                                           />
                                         ) : newRuleFieldType === 'date' ? (
+                                          <>
+                                            <input
+                                              type="text"
+                                              value={newRuleFieldValue}
+                                              onChange={(e) => setNewRuleFieldValue(e.target.value)}
+                                              placeholder="e.g., {{currentDate+7}}"
+                                              className="w-full px-3 py-1 border rounded-lg text-sm mb-2 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
+                                              title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
+                                            />
+                                            <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 mb-2">
+                                              <p className="text-xs text-blue-800">
+                                                ℹ️ Date format: <span className="font-semibold">YYYY-MM-DD</span> (e.g., {getCurrentDateExample()})
+                                              </p>
+                                            </div>
+                                          </>
+                                        ) : newRuleFieldType === 'checkbox' ? (
                                           <input
                                             type="text"
                                             value={newRuleFieldValue}
                                             onChange={(e) => setNewRuleFieldValue(e.target.value)}
-                                            placeholder="e.g., {{currentDate+7}}"
+                                            placeholder="true or false"
                                             className="w-full px-3 py-1 border rounded-lg text-sm mb-2 focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                                            title="Date placeholder: {{currentDate}}, {{currentDate+7}}, {{currentDate-3}}"
+                                            title="Checkbox value: true or false"
                                           />
-                                        ) : (
+                                        ) : newRuleFieldType === 'dropdown' ? (
                                           <div className="flex gap-2 mb-2">
                                             <input
                                               type="text"
@@ -1533,7 +1850,66 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               title="Optional - Leave empty to use Label as the value. Only specify if the internal value differs from display text."
                                             />
                                           </div>
-                                        )}
+                                        ) : newRuleFieldType === 'radio' ? (
+                                          <div className="space-y-2 mb-2">
+                                            <div className="bg-purple-50 p-2 rounded border border-purple-200">
+                                              <p className="text-xs font-medium text-purple-900 mb-2">Radio Options:</p>
+                                              {newRuleRadioOptions.length > 0 ? (
+                                                <div className="space-y-1 mb-2">
+                                                  {newRuleRadioOptions.map((option, idx) => (
+                                                    <div key={idx} className="flex items-center gap-2 bg-white px-2 py-1 rounded text-xs">
+                                                      <span>{option}</span>
+                                                      <button
+                                                        onClick={() => setNewRuleRadioOptions(newRuleRadioOptions.filter((_, i) => i !== idx))}
+                                                        className="ml-auto text-red-600 hover:text-red-800"
+                                                      >
+                                                        ✕
+                                                      </button>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              ) : (
+                                                <p className="text-xs text-gray-500 mb-2">No options added yet</p>
+                                              )}
+                                              <div className="flex gap-1">
+                                                <input
+                                                  type="text"
+                                                  value={newRuleRadioOptionInput}
+                                                  onChange={(e) => setNewRuleRadioOptionInput(e.target.value)}
+                                                  placeholder="Add option"
+                                                  className="flex-1 px-2 py-1 border rounded text-xs"
+                                                  onKeyPress={(e) => {
+                                                    if (e.key === 'Enter' && newRuleRadioOptionInput.trim()) {
+                                                      setNewRuleRadioOptions([...newRuleRadioOptions, newRuleRadioOptionInput.trim()]);
+                                                      setNewRuleRadioOptionInput('');
+                                                    }
+                                                  }}
+                                                />
+                                                <button
+                                                  onClick={() => {
+                                                    if (newRuleRadioOptionInput.trim() && !newRuleRadioOptions.includes(newRuleRadioOptionInput.trim())) {
+                                                      setNewRuleRadioOptions([...newRuleRadioOptions, newRuleRadioOptionInput.trim()]);
+                                                      setNewRuleRadioOptionInput('');
+                                                    }
+                                                  }}
+                                                  className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700"
+                                                >
+                                                  +
+                                                </button>
+                                              </div>
+                                            </div>
+                                            <select
+                                              value={newRuleFieldValue}
+                                              onChange={(e) => setNewRuleFieldValue(e.target.value)}
+                                              className="w-full px-3 py-1 border rounded-lg text-sm"
+                                            >
+                                              <option value="">Select default value...</option>
+                                              {newRuleRadioOptions.map((option, idx) => (
+                                                <option key={idx} value={option}>{option}</option>
+                                              ))}
+                                            </select>
+                                          </div>
+                                        ) : null}
                                         <button
                                           onClick={handleAddFieldToRule}
                                           className="w-full px-3 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transform hover:scale-105 transition-all"

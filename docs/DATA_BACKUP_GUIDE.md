@@ -28,6 +28,8 @@ The backup system automatically protects:
    - Dynamic placeholders ({{preferredDevice}}, etc.)
 
 4. **Custom Attributes**
+   - **Workflow Names** (Itential Workflow dropdown values)
+   - **Product Names** (Product dropdown values)
    - Custom Itential Workflows you've added
    - Custom Product Names you've defined
    - All Custom Attribute Manager data

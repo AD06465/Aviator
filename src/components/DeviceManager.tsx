@@ -15,6 +15,7 @@ interface DeviceManagerProps {
   selectedPort: string;
   onDeviceChange: (device: string) => void;
   onPortChange: (port: string) => void;
+  onPortSpeedChange?: (portSpeed: number) => void; // Callback to notify parent of port speed changes
   environment: string;
   portSpeedMbps?: number; // Auto-detected port speed from order API
 }
@@ -47,16 +48,18 @@ export default function DeviceManager({
   selectedPort,
   onDeviceChange,
   onPortChange,
+  onPortSpeedChange,
   environment,
   portSpeedMbps,
 }: DeviceManagerProps) {
   const [devices, setDevices] = useState<Device[]>([]);
   const [newDeviceName, setNewDeviceName] = useState('');
   const [newDeviceDescription, setNewDeviceDescription] = useState('');
-  const [selectedPortSpeed, setSelectedPortSpeed] = useState<number>(portSpeedMbps || 1000);
+  const [selectedPortSpeed, setSelectedPortSpeed] = useState<number>(portSpeedMbps || 10000);
   const [isFetchingPorts, setIsFetchingPorts] = useState(false);
   const [availablePorts, setAvailablePorts] = useState<PortInfo[]>([]);
   const [portFetchError, setPortFetchError] = useState('');
+  const [isExpanded, setIsExpanded] = useState(false);
   const [showDeviceManager, setShowDeviceManager] = useState(false);
   const [editingDevice, setEditingDevice] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -67,8 +70,20 @@ export default function DeviceManager({
     if (portSpeedMbps && portSpeedMbps !== selectedPortSpeed) {
       setSelectedPortSpeed(portSpeedMbps);
       console.log(`✅ Port speed auto-updated to: ${portSpeedMbps} Mbps`);
+      // Notify parent component
+      if (onPortSpeedChange) {
+        onPortSpeedChange(portSpeedMbps);
+      }
     }
   }, [portSpeedMbps]);
+
+  // Notify parent when port speed changes
+  const handlePortSpeedChange = (newSpeed: number) => {
+    setSelectedPortSpeed(newSpeed);
+    if (onPortSpeedChange) {
+      onPortSpeedChange(newSpeed);
+    }
+  };
 
   // Load devices from localStorage on mount
   useEffect(() => {
@@ -455,15 +470,43 @@ export default function DeviceManager({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Device and Port Configuration Section */}
-      <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Device and Port Configuration</h3>
-        
-        <div className="space-y-4">
+    <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-200">
+      {/* Collapsible Header */}
+      <div
+        className="flex justify-between items-center p-4 cursor-pointer hover:bg-blue-100 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">{isExpanded ? '📂' : '📁'}</span>
+          <div>
+            <h3 className="text-lg font-bold text-blue-900">Device and Port Configuration</h3>
+            <p className="text-sm text-blue-700 mt-0.5">
+              {isExpanded ? 'Click to collapse' : `Click to expand${selectedDevice ? ` • ${selectedDevice}${selectedPort ? ` → ${selectedPort}` : ''}` : ''}`}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {selectedDevice && selectedPort && !isExpanded && (
+            <div className="flex items-center gap-1.5 text-xs text-gray-600 bg-white px-3 py-1.5 rounded-full border border-blue-300">
+              <span className="text-blue-600">✓</span>
+              <span>Configured</span>
+            </div>
+          )}
+          <span className="text-2xl text-blue-600">{isExpanded ? '▼' : '▶'}</span>
+        </div>
+      </div>
+
+      {/* Collapsible Content */}
+      {isExpanded && (
+        <div className="px-4 pb-4 space-y-4">
+          {/* Info hint */}
+          <div className="flex items-center gap-2 text-xs text-gray-600 bg-white px-3 py-2 rounded border border-blue-300">
+            <span className="text-blue-600">💡</span>
+            <span>Use as: <code className="bg-blue-50 px-2 py-0.5 rounded text-blue-700 font-mono">{'{{preferredDevice}}'}</code> & <code className="bg-blue-50 px-2 py-0.5 rounded text-blue-700 font-mono">{'{{preferredPort}}'}</code></span>
+          </div>
           {/* Device Selection with Manage Button */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2" title="Use as {{preferredDevice}} in Task Configuration">
               Preferred Device (Optional)
             </label>
             <div className="flex gap-2">
@@ -708,7 +751,11 @@ export default function DeviceManager({
             </label>
             <select
               value={selectedPortSpeed}
-              onChange={(e) => setSelectedPortSpeed(Number(e.target.value))}
+              onChange={(e) => {
+                const newSpeed = Number(e.target.value);
+                setSelectedPortSpeed(newSpeed);
+                handlePortSpeedChange(newSpeed);
+              }}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               {PORT_SPEEDS.map((speed) => (
@@ -721,7 +768,7 @@ export default function DeviceManager({
 
           {/* Port Fetching */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-700 mb-2" title="Use as {{preferredPort}} in Task Configuration">
               Preferred Port (Optional)
             </label>
             <div className="flex gap-2">
@@ -764,7 +811,7 @@ export default function DeviceManager({
             </div>
           )}
         </div>
-      </div>
+      )}
     </div>
   );
 }

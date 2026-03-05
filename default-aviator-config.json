@@ -1,0 +1,116 @@
+{
+  "timestamp": "2026-03-02T00:00:00.000Z",
+  "version": "1.0.0",
+  "description": "Default AVIATOR configuration for quick setup. Import this file to get started with pre-configured tasks, workflows, and product names.",
+  "devices": [],
+  "customAttributes": {
+    "itentialWorkflows": [
+      "Monarch Onnet",
+      "Monarch Offnet",
+      "Colorless"
+    ],
+    "productNames": [
+      "DIA",
+      "ELINE",
+      "ELAN",
+      "ELYNK",
+      "IPVPN",
+      "UNI"
+    ]
+  },
+  "taskConfig": {
+    "completableTasks": [
+      "Confirm/Schedule Activation",
+      "Service Validate Field",
+      "Service Validate - UNI (Tester)",
+      "Service Validate Ethernet",
+      "Send Completion Details",
+      "Verify or Assign Appropriate Device",
+      "LOA Designate Tid and Port",
+      "LOA Verification",
+      "BE Installation Scheduled Date: BE completion notice"
+    ],
+    "retryableTasks": [
+      "Get Details from MESH",
+      "Create Uni in ASRI",
+      "Activate UNI in ACT",
+      "Update Uni in ASRI",
+      "Activate Path in ACT"
+    ],
+    "taskFieldMappings": {
+      "Service Validate - UNI (Tester)": {
+        "Demarc_Information*": "Test"
+      },
+      "Verify or Assign Appropriate Device": {
+        "Fallout Action": "Enter Port Data",
+        "Device: *": "{{preferredDevice}}",
+        "Port: *": "{{preferredPort}}"
+      },
+      "LOA Designate Tid and Port": {
+        "TID*": "{{preferredDevice}}",
+        "Port (eg: GigabitEthernet0/0/23)": "{{preferredPort}}",
+        "Demarc Location": "TEST"
+      },
+      "LOA Verification": {
+        "Demarc Location": "TEST"
+      }
+    },
+    "conditionalRules": {
+      "Verify or Assign Appropriate Device": [
+        {
+          "id": "rule-colorless",
+          "conditionType": "workflow",
+          "conditionValue": "Colorless",
+          "fields": [
+            {
+              "fieldName": "Fallout Action:",
+              "fieldValue": "Create Cap Jeop",
+              "fieldType": "dropdown",
+              "dropdownValue": "Create Cap Jeop"
+            }
+          ]
+        },
+        {
+          "id": "rule-onnet",
+          "conditionType": "workflow",
+          "conditionValue": "Monarch Onnet",
+          "fields": [
+            {
+              "fieldName": "Fallout Action:",
+              "fieldValue": "Enter Port Data",
+              "fieldType": "dropdown",
+              "dropdownValue": "Enter Port Data"
+            }
+          ]
+        }
+      ],
+      "Service Validate - UNI (Tester)": [
+        {
+          "id": "rule-product-eline",
+          "conditionType": "product",
+          "conditionValue": "ELINE",
+          "fields": [
+            {
+              "fieldName": "Demarc_Information*",
+              "fieldValue": "ELINE Service Validated",
+              "fieldType": "text"
+            }
+          ]
+        },
+        {
+          "id": "rule-product-uni",
+          "conditionType": "product",
+          "conditionValue": "UNI",
+          "fields": [
+            {
+              "fieldName": "Demarc_Information*",
+              "fieldValue": "UNI Service Validated",
+              "fieldType": "text"
+            }
+          ]
+        }
+      ]
+    },
+    "taskSequencing": {}
+  }
+}

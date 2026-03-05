@@ -51,12 +51,25 @@ export class DataBackupManager {
     // Update metadata
     this.updateBackupMetadata();
 
+    // Log detailed backup info
+    const workflowCount = backup.customAttributes?.itentialWorkflows?.length || 0;
+    const productCount = backup.customAttributes?.productNames?.length || 0;
+    
     logger.info('Data backup created', {
       component: 'DataBackupManager',
       timestamp: backup.timestamp,
       deviceCount: backup.devices.length,
       hasTaskConfig: !!backup.taskConfig,
       hasCustomAttributes: !!backup.customAttributes,
+      workflowNamesCount: workflowCount,
+      productNamesCount: productCount,
+    });
+    
+    console.log('✅ Backup created with:', {
+      devices: backup.devices.length,
+      workflows: workflowCount,
+      productNames: productCount,
+      taskConfigs: backup.taskConfig?.completableTasks?.length || 0
     });
 
     return backup;
@@ -95,11 +108,19 @@ export class DataBackupManager {
         });
       }
 
-      // Restore custom attributes
+      // Restore custom attributes (workflows and product names)
       if (backup.customAttributes) {
         localStorage.setItem(CUSTOM_ATTRIBUTES_KEY, JSON.stringify(backup.customAttributes));
+        const workflowCount = backup.customAttributes.itentialWorkflows?.length || 0;
+        const productCount = backup.customAttributes.productNames?.length || 0;
         logger.info('Custom attributes restored from backup', {
           component: 'DataBackupManager',
+          workflowNamesCount: workflowCount,
+          productNamesCount: productCount,
+        });
+        console.log('✅ Restored custom attributes:', {
+          workflows: workflowCount,
+          productNames: productCount
         });
       }
 

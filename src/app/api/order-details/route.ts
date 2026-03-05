@@ -105,6 +105,19 @@ export async function GET(request: NextRequest) {
     
     // Extract product name from the first product in productPackage
     if (Array.isArray(data) && data.length > 0) {
+      // Debug: Print all product names and their attributes for this order
+      for (const productPackage of data) {
+        if (productPackage.products && Array.isArray(productPackage.products)) {
+          for (const product of productPackage.products) {
+            console.log(`[DEBUG] Product:`, product.productName);
+            if (product.productAttributes && Array.isArray(product.productAttributes)) {
+              for (const attr of product.productAttributes) {
+                console.log(`[DEBUG]   Attribute:`, attr.attributeName, '|', attr.attributeDisplayValue);
+              }
+            }
+          }
+        }
+      }
       console.log(`🔍 First item in array:`, data[0]);
       
       // Product name is in products[0].productName, not at the top level
@@ -113,6 +126,17 @@ export async function GET(request: NextRequest) {
         if (firstProduct.productName) {
           productName = firstProduct.productName.trim();
           console.log(`✅ Product name found: "${productName}"`);
+          
+          // If it's "Wholesale UNI", check for related OVC product
+          if (productName === 'Wholesale UNI' && data[0].relatedProducts && Array.isArray(data[0].relatedProducts)) {
+            const ovcRelation = data[0].relatedProducts.find((rel: any) => 
+              rel.relationshipName === 'OVCs' && rel.relatedProductName
+            );
+            if (ovcRelation && ovcRelation.relatedProductName) {
+              productName = ovcRelation.relatedProductName;
+              console.log(`✅ Found OVC relationship: Using "${productName}" instead of "Wholesale UNI"`);
+            }
+          }
         }
       } else {
         console.warn(`⚠️ No products array in data[0]. Available fields:`, Object.keys(data[0]));
@@ -124,6 +148,7 @@ export async function GET(request: NextRequest) {
     if (Array.isArray(data) && data.length > 0) {
       // List of possible attribute names for port/bandwidth speed
       const speedAttributeNames = [
+        'Bandwidth in Mb',
         'Port Bandwidth',
         'Transport Bandwidth',
         'Bandwidth',
@@ -136,61 +161,117 @@ export async function GET(request: NextRequest) {
         'VPN CIR',
         'VPN PIR',
         'Total VPN CIR',
-        'Bandwidth in Mb',
       ];
 
+      // Always search all products and attributes for the highest bandwidth value
+      let maxBandwidthMbps = 0;
+      let maxBandwidthDisplay = '';
+      let maxBandwidthFoundIn = '';
+      let maxBandwidthProduct = null;
+      let maxBandwidthProductPackage = null;
       for (const productPackage of data) {
         if (productPackage.products && Array.isArray(productPackage.products)) {
           for (const product of productPackage.products) {
-            
-            // Strategy 1: Search in productAttributes
             if (product.productAttributes && Array.isArray(product.productAttributes)) {
               for (const attrName of speedAttributeNames) {
-                const attr = product.productAttributes.find(
-                  (a: any) => a.attributeName === attrName
-                );
-                
-                if (attr?.attributeDisplayValue && attr.attributeDisplayValue !== 'null' && attr.attributeDisplayValue !== '') {
-                  portSpeed = attr.attributeDisplayValue;
-                  foundIn = `productAttributes.${attrName}`;
-                  console.log(`✅ Port speed found: "${portSpeed}" in ${foundIn}`);
-                  break;
-                }
-              }
-              if (portSpeed) break;
-            }
-
-            // Strategy 2: Search in priceDetails descriptions
-            if (!portSpeed && product.priceInfo?.priceDetails && Array.isArray(product.priceInfo.priceDetails)) {
-              for (const priceDetail of product.priceInfo.priceDetails) {
-                if (priceDetail.description) {
-                  const desc = priceDetail.description;
-                  // Look for patterns like "Port Bandwidth = 1 Gbps" or "Bandwidth=1000 Mbps"
-                  const bandwidthMatch = desc.match(/(?:Port Bandwidth|Transport Bandwidth|Bandwidth|Port Speed)\s*[=:]\s*([0-9.]+\s*(?:Gbps|Mbps|Kbps|GigE|G|M))/i);
-                  if (bandwidthMatch) {
-                    portSpeed = bandwidthMatch[1].trim();
-                    foundIn = `priceDetails.description`;
-                    console.log(`✅ Port speed found: "${portSpeed}" in ${foundIn}`);
-                    break;
+                const attr = product.productAttributes.find((a: any) => a.attributeName === attrName);
+                if (attr && attr.attributeDisplayValue && attr.attributeDisplayValue !== 'null' && attr.attributeDisplayValue !== '') {
+                  // Try to parse Mbps or Gbps value
+                  let mbps = 0;
+                  let match = attr.attributeDisplayValue.match(/([0-9.]+)\s*Mbps/i);
+                  if (match) {
+                    mbps = parseFloat(match[1]);
+                  } else {
+                    match = attr.attributeDisplayValue.match(/([0-9.]+)\s*Gbps/i);
+                    if (match) {
+                      mbps = parseFloat(match[1]) * 1000;
+                    }
+                  }
+                  if (mbps > maxBandwidthMbps) {
+                    maxBandwidthMbps = mbps;
+                    maxBandwidthDisplay = mbps >= 1000 ? (mbps / 1000) + ' Gbps' : mbps + ' Mbps';
+                    maxBandwidthFoundIn = `productAttributes.${attrName} (product: ${product.productName})`;
+                    maxBandwidthProduct = product;
+                    maxBandwidthProductPackage = productPackage;
                   }
                 }
               }
-              if (portSpeed) break;
             }
-
-            // Strategy 3: Check product name for bandwidth hints
-            if (!portSpeed && product.productName) {
-              const nameMatch = product.productName.match(/([0-9.]+\s*(?:Gbps|Mbps|GigE|G|M))/i);
-              if (nameMatch) {
-                portSpeed = nameMatch[1].trim();
-                foundIn = `productName`;
-                console.log(`✅ Port speed found: "${portSpeed}" in ${foundIn}`);
-                break;
+            // Also check priceDetails descriptions
+            if (product.priceInfo?.priceDetails && Array.isArray(product.priceInfo.priceDetails)) {
+              for (const priceDetail of product.priceInfo.priceDetails) {
+                if (priceDetail.description) {
+                  const desc = priceDetail.description;
+                  let mbps = 0;
+                  let match = desc.match(/([0-9.]+)\s*Mbps/i);
+                  if (match) {
+                    mbps = parseFloat(match[1]);
+                  } else {
+                    match = desc.match(/([0-9.]+)\s*Gbps/i);
+                    if (match) {
+                      mbps = parseFloat(match[1]) * 1000;
+                    }
+                  }
+                  if (mbps > maxBandwidthMbps) {
+                    maxBandwidthMbps = mbps;
+                    maxBandwidthDisplay = mbps >= 1000 ? (mbps / 1000) + ' Gbps' : mbps + ' Mbps';
+                    maxBandwidthFoundIn = `priceDetails.description (product: ${product.productName})`;
+                    maxBandwidthProduct = product;
+                    maxBandwidthProductPackage = productPackage;
+                  }
+                }
+              }
+            }
+            // Also check product name for bandwidth hints
+            if (product.productName) {
+              let mbps = 0;
+              let match = product.productName.match(/([0-9.]+)\s*Mbps/i);
+              if (match) {
+                mbps = parseFloat(match[1]);
+              } else {
+                match = product.productName.match(/([0-9.]+)\s*Gbps/i);
+                if (match) {
+                  mbps = parseFloat(match[1]) * 1000;
+                }
+              }
+              if (mbps > maxBandwidthMbps) {
+                maxBandwidthMbps = mbps;
+                maxBandwidthDisplay = mbps >= 1000 ? (mbps / 1000) + ' Gbps' : mbps + ' Mbps';
+                maxBandwidthFoundIn = `productName (product: ${product.productName})`;
+                maxBandwidthProduct = product;
+                maxBandwidthProductPackage = productPackage;
               }
             }
           }
-          if (portSpeed) break;
         }
+      }
+      let parentProductName = '';
+      if (maxBandwidthProduct && maxBandwidthProductPackage && Array.isArray(maxBandwidthProductPackage.products)) {
+        // Find parent product in the same package
+        const parent = maxBandwidthProductPackage.products.find((p: any) => p.isParentProduct);
+        if (parent && parent.productName) {
+          parentProductName = parent.productName;
+          
+          // Special case: If parent is "Wholesale UNI", check for related "E-Access - OVC" product
+          if (parentProductName === 'Wholesale UNI' && maxBandwidthProductPackage.relatedProducts && Array.isArray(maxBandwidthProductPackage.relatedProducts)) {
+            const ovcRelation = maxBandwidthProductPackage.relatedProducts.find((rel: any) => 
+              rel.relationshipName === 'OVCs' && rel.relatedProductName
+            );
+            if (ovcRelation && ovcRelation.relatedProductName) {
+              parentProductName = ovcRelation.relatedProductName;
+              console.log(`✅ Found OVC relationship: Using "${parentProductName}" instead of "Wholesale UNI"`);
+            }
+          }
+        } else if (maxBandwidthProduct.productName) {
+          parentProductName = maxBandwidthProduct.productName;
+        }
+      }
+      if (maxBandwidthMbps > 0) {
+        portSpeed = maxBandwidthDisplay;
+        foundIn = maxBandwidthFoundIn;
+        productName = parentProductName;
+        console.log(`✅ Port speed found: "${portSpeed}" in ${foundIn}`);
+        console.log(`✅ Parent product name: "${productName}"`);
       }
     }
 
@@ -198,10 +279,11 @@ export async function GET(request: NextRequest) {
       console.warn('⚠️ Port Bandwidth attribute not found in order');
     } else {
       // Normalize the port speed
+      console.log(`[DEBUG] Normalizing port speed value:`, portSpeed);
       const normalized = normalizePortSpeed(portSpeed);
+      console.log(`[DEBUG] Normalized result:`, normalized);
       if (normalized) {
         console.log(`✅ Normalized port speed: ${portSpeed} → ${normalized.display} (${normalized.mbps} Mbps)`);
-        
         return NextResponse.json({
           success: true,
           portSpeed: normalized.display, // Display format for UI

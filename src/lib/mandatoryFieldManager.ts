@@ -100,7 +100,7 @@ export class MandatoryFieldManager {
           let hasConfiguredValue = false;
           
           if (taskConfig && orderForm) {
-            const configuredValue = getTaskFieldValue(taskDetails.taskName, param.name, taskConfig, orderForm, taskDetails);
+            const configuredValue = getTaskFieldValue(taskDetails.taskName, param.name, taskConfig, orderForm, taskDetails, 1);
             if (configuredValue) {
               currentValue = configuredValue;
               hasConfiguredValue = true;

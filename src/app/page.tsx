@@ -13,6 +13,7 @@ import { OrderForm as OrderFormType, Task, TaskManagementConfig, ProcessingStatu
 import { defaultTaskConfig } from '../lib/taskConfig';
 import TaskProcessor from '../lib/taskProcessor';
 import { flightDeckApiService } from '../lib/api';
+import { usePreventSleep } from '../lib/usePreventSleep';
 
 export default function HomePage() {
   const [currentOrder, setCurrentOrder] = useState<OrderFormType | null>(null);
@@ -26,6 +27,10 @@ export default function HomePage() {
   const [lastSearchTime, setLastSearchTime] = useState<Date | null>(null);
   const [toast, setToast] = useState<{message: string; type: 'success' | 'error' | 'info' | 'warning'; isVisible: boolean} | null>(null);
   const [monitoringIntervalId, setMonitoringIntervalId] = useState<NodeJS.Timeout | null>(null);
+
+  // Prevent browser/system sleep during automation
+  const isAutomationActive = processingStatus?.isProcessing || false;
+  const { isActive: isSleepPrevented } = usePreventSleep(isAutomationActive);
 
   useEffect(() => {
     // Initialize task processor
@@ -223,6 +228,9 @@ export default function HomePage() {
       const saved = localStorage.getItem('aviator-task-config');
       if (saved) {
         const config = JSON.parse(saved);
+        console.log('📦 page.tsx: Loading config from localStorage');
+        console.log('   taskSequencing keys:', Object.keys(config.taskSequencing || {}));
+        console.log('   taskSequencing:', JSON.stringify(config.taskSequencing, null, 2));
         setTaskConfig(config);
       }
     } catch (error) {
@@ -258,6 +266,22 @@ export default function HomePage() {
             processing with intelligent task completion and monitoring.
           </p>
         </div>
+
+        {/* Sleep Prevention Status Banner */}
+        {isSleepPrevented && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3">
+            <div className="flex items-center justify-center">
+              <div className="flex-shrink-0">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+              </div>
+              <p className="ml-2 text-sm font-medium text-green-800">
+                Sleep prevention active - automation will continue running without interruption
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Stats Cards */}
         {processingStatus && (

@@ -203,6 +203,14 @@ export interface UserProfile {
   workgroupsList: UserWorkgroup[];
 }
 
+export interface DevicePortPair {
+  device: string;
+  port: string;
+  portSysId?: string;
+  portSpeed?: string;
+  portClass?: string;
+}
+
 export interface OrderForm {
   orderNumber: string;
   productName: string;
@@ -214,6 +222,7 @@ export interface OrderForm {
   preferredPort?: string;
   portSpeed?: string; // Display format: "10 Gbps"
   portSpeedMbps?: number; // Numeric format for API: 10000
+  devicePortPairs?: DevicePortPair[]; // Multiple device/port combinations for duplicate tasks
   // User profile data from API
   userCuid?: string;
   userFullName?: string;

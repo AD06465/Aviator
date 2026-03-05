@@ -38,15 +38,53 @@ A comprehensive, enterprise-grade application for automating FlightDeck task com
 - **Enhanced Task Configuration**: User-friendly interface to manage task completion rules and field mappings
 - **Comprehensive Task Monitor**: Detailed task information with sorting and filtering
 - **Dynamic Field Modal**: Interactive popup showing all relevant fields with pre-filled defaults
+- **Multi-Device/Port Manager** ⭐ NEW: Configure multiple device/port pairs for duplicate tasks with parallel MESH API calls
 
 ### Advanced Features
 - **Field Mapping System**: Configure mandatory field values for different task types
+- **Multi-Device/Port Configuration** ⭐ NEW: Handle duplicate tasks with different device/port requirements
+  - Select multiple devices at once
+  - Parallel MESH API calls for all selected devices
+  - Sequential assignment with numbered placeholders ({{preferredDevice1}}, {{preferredPort1}}, etc.)
+  - Visual table showing device/port pairs with usage examples
 - **Priority-based Processing**: Intelligent task completion order based on business logic
 - **Delay Management**: Configurable delays between task processing to avoid system overload
 - **Failed Task Handling**: Smart handling of failed tasks with retry mechanisms
 - **Configuration Persistence**: Save and load custom task configurations
+- **Sleep Prevention**: Keeps automation running without system interruption
 
-## 🏗️ Architecture
+## � Quick Start for New Users
+
+### Option 1: Import Default Configuration (Recommended)
+
+Get started in seconds with our pre-configured setup:
+
+1. **Start AVIATOR**: Run `npm run dev` and open `http://localhost:3000`
+2. **Navigate to Backup Tab**: Click the "Backup" tab
+3. **Import Default Config**: 
+   - Find the "Quick Start for New Users" section
+   - Click **"Download Default Config"** to get `default-aviator-config.json`
+   - Click **"Import Default Config"** and select the downloaded file
+4. **Refresh**: Page will auto-refresh with all configurations loaded
+
+**What You Get:**
+- ✅ 9 pre-configured completable tasks
+- ✅ 5 retryable tasks with smart retry logic
+- ✅ 3 workflow names (Monarch Onnet, Monarch Offnet, Colorless)
+- ✅ 6 product names (DIA, ELINE, ELAN, ELYNK, IPVPN, UNI)
+- ✅ Field mappings for common tasks
+- ✅ Example conditional rules
+
+### Option 2: Manual Configuration
+
+1. Start AVIATOR
+2. Go to **Task Config Table** tab
+3. Add tasks, workflows, and field mappings manually
+4. Configure conditional rules as needed
+
+📖 **Detailed Guide**: See [Default Config Guide](docs/DEFAULT_CONFIG_GUIDE.md)
+
+## �🏗️ Architecture
 
 ### Technology Stack
 - **Frontend**: Next.js 14 with TypeScript

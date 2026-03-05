@@ -16,6 +16,9 @@ import {
   areTaskDependenciesMet,
   shouldWaitForTask,
   getDelayAfterTask,
+  processDatePlaceholder,
+  mapLabelToFieldName,
+  clearLabelMappingCache,
 } from './taskConfig';
 import { MandatoryFieldManager } from './mandatoryFieldManager';
 
@@ -27,6 +30,7 @@ export class TaskProcessor {
   private beInstallationCompletedTime?: Date;
   private completedTaskNames: string[] = []; // Track completed tasks for dependency checking
   private waitingForTask: string | null = null; // Track if we're waiting for a blocking task
+  private globalTaskInstanceCounter: number = 0; // Global counter for device/port pair assignment across ALL tasks
 
   constructor(statusUpdateCallback?: (status: ProcessingStatus) => void) {
     this.statusUpdateCallback = statusUpdateCallback;
@@ -39,6 +43,18 @@ export class TaskProcessor {
     }
 
     this.isProcessing = true;
+    
+    // Debug: Log the task sequencing config
+    console.log('🔧 TaskProcessor.startProcessing received taskConfig:');
+    console.log('   taskSequencing keys:', Object.keys(taskConfig.taskSequencing || {}));
+    console.log('   taskSequencing data:', JSON.stringify(taskConfig.taskSequencing, null, 2));
+    
+    // Clear label mapping cache for fresh start
+    clearLabelMappingCache();
+    
+    // Reset global task instance counter for new processing session
+    this.globalTaskInstanceCounter = 0;
+    console.log('🔄 Global task counter reset - ready for sequential device/port pair assignment across all tasks');
     
     // Set up API service
     flightDeckApiService.setEnvironment(orderForm.environment);
@@ -75,6 +91,11 @@ export class TaskProcessor {
 
       this.isCycleInProgress = true;
       console.log(`🔄 Processing interval tick - checking for tasks...`);
+      
+      // Reset global task counter for each processing cycle
+      // This ensures failed task retries don't consume counter slots
+      this.globalTaskInstanceCounter = 0;
+      console.log('🔄 Global task counter reset for new processing cycle');
 
       try {
         // Search for tasks
@@ -122,15 +143,17 @@ export class TaskProcessor {
           }
         }
 
-        // Process ready, assigned, and created tasks
+
+        // Only process tasks with status ready/created/assigned, but sort by user priority
         const processableTasks = tasks.filter(t => {
           const status = t.TASK_STATUS.toLowerCase();
           return status === 'ready' || status === 'assigned' || status === 'created';
         });
 
-        console.log(`🔍 Found ${processableTasks.length} processable tasks out of ${totalTasks} total tasks`);
+        console.log(`🔍 Found ${processableTasks.length} processable tasks (ready/created/assigned), sorting by user-defined priority`);
         processableTasks.forEach(task => {
-          console.log(`  - ${task.TASK_NAME} (ID: ${task.ID}, Status: ${task.TASK_STATUS})`);
+          const priority = getTaskPriority(task.TASK_NAME, taskConfig);
+          console.log(`  - ${task.TASK_NAME} (ID: ${task.ID}, Status: ${task.TASK_STATUS}, Priority: ${priority})`);
         });
 
         // Update completed task names for dependency tracking
@@ -158,129 +181,146 @@ export class TaskProcessor {
           }
         }
 
-        // Process ready/assigned/created tasks if any exist
+        // Process all tasks by priority, regardless of status
         if (processableTasks.length > 0) {
           // Handle BE Installation sequencing logic
           await this.handleBEInstallationSequencing(processableTasks);
 
-          console.log(`🎯 Processable tasks after BE Installation sequencing: ${processableTasks.length}`);
+          console.log(`🎯 Tasks after BE Installation sequencing: ${processableTasks.length}`);
           processableTasks.forEach(task => {
             console.log(`  - ${task.TASK_NAME} (ID: ${task.ID}, Status: ${task.TASK_STATUS})`);
           });
 
-          if (processableTasks.length > 0) {
-            // Filter tasks based on dependencies
-            // Create a list of all task names in this order
-            const allTaskNames = tasks.map(t => t.TASK_NAME);
-            
-            const tasksReadyToProcess = processableTasks.filter(task => {
-              const dependenciesMet = areTaskDependenciesMet(task.TASK_NAME, this.completedTaskNames, taskConfig, allTaskNames);
-              if (!dependenciesMet) {
-                console.log(`⏸️ Task \"${task.TASK_NAME}\" has unmet dependencies`);
-              }
-              return dependenciesMet;
+          // Filter tasks based on dependencies
+          const allTaskNames = tasks.map(t => t.TASK_NAME);
+          const tasksReadyToProcess = processableTasks.filter(task => {
+            const dependenciesMet = areTaskDependenciesMet(task.TASK_NAME, this.completedTaskNames, taskConfig, allTaskNames);
+            if (!dependenciesMet) {
+              console.log(`⏸️ Task \"${task.TASK_NAME}\" has unmet dependencies`);
+            }
+            return dependenciesMet;
+          });
+
+          if (tasksReadyToProcess.length === 0) {
+            console.log(`⏸️ No tasks ready to process (all waiting for dependencies)`);
+            return;
+          }
+          
+          console.log(`✅ ${tasksReadyToProcess.length} task(s) ready after dependency check:`);
+          tasksReadyToProcess.forEach(task => {
+            const priority = getTaskPriority(task.TASK_NAME, taskConfig);
+            console.log(`  - ${task.TASK_NAME} (Priority: ${priority})`);
+          });
+
+          // Sort tasks by priority (lower number = higher priority)
+          const sortedTasks = tasksReadyToProcess.sort((a, b) =>
+            getTaskPriority(a.TASK_NAME, taskConfig) - getTaskPriority(b.TASK_NAME, taskConfig)
+          );
+
+          console.log(`⚡ Starting to process ${sortedTasks.length} tasks (in STRICT priority order):`);
+          sortedTasks.forEach((task, index) => {
+            const priority = getTaskPriority(task.TASK_NAME, taskConfig);
+            const sequencing = taskConfig.taskSequencing?.[task.TASK_NAME];
+            const delayAfter = sequencing?.delayAfter || 0;
+            const waitFor = sequencing?.waitForCompletion || false;
+            console.log(`  ${index + 1}. ${task.TASK_NAME} (Priority: ${priority}, DelayAfter: ${delayAfter}s, WaitForCompletion: ${waitFor})`);
+          });
+
+          // STRICT PRIORITY MODE: Process only one task per cycle to ensure proper sequencing
+          // This ensures that lower-priority tasks never start before higher-priority tasks complete
+          // Find the first task in priority order that is in the completable list
+          let taskToProcess = null;
+          
+          for (const task of sortedTasks) {
+            if (!this.isProcessing) return;
+
+            // Check if task is in completable list
+            const isInCompletableList = shouldCompleteTask(task.TASK_NAME, taskConfig);
+            if (!isInCompletableList) {
+              console.log(`⏭️ Skipping task "${task.TASK_NAME}" - not in Task Configuration Manager list (trying next task)`);
+              console.log(`📋 Current completable tasks:`, taskConfig.completableTasks);
+              console.log(`🔍 Looking for: "${task.TASK_NAME}" (length: ${task.TASK_NAME.length})`);
+              console.log(`🔍 Completable tasks (with lengths):`, taskConfig.completableTasks.map(t => `"${t}" (${t.length})`));
+              continue; // Skip this task and try the next one
+            }
+
+            // Found a completable task
+            taskToProcess = task;
+            break;
+          }
+          
+          if (taskToProcess) {
+            if (!this.isProcessing) return;
+
+            console.log(`🎯 [STRICT PRIORITY] Processing highest priority completable task: ${taskToProcess.TASK_NAME} (Priority: ${getTaskPriority(taskToProcess.TASK_NAME, taskConfig)}, ID: ${taskToProcess.ID}, Status: ${taskToProcess.TASK_STATUS})`);
+
+            this.updateStatus({
+              isProcessing: true,
+              currentTask: taskToProcess.TASK_NAME,
+              totalTasks,
+              completedTasks,
+              failedTasks,
+              lastUpdate: new Date(),
             });
 
-            if (tasksReadyToProcess.length === 0) {
-              console.log(`⏸️ No tasks ready to process (all waiting for dependencies)`);
+            console.log(`🚀 Processing configured task: ${taskToProcess.TASK_NAME} (Status: ${taskToProcess.TASK_STATUS})`);
+
+            try {
+              console.log(`🔧 About to call processCompleteTask for: ${taskToProcess.TASK_NAME}`);
+              const success = await this.processCompleteTask(taskToProcess, orderForm, taskConfig);
+              console.log(`📊 processCompleteTask result for ${taskToProcess.TASK_NAME}: ${success}`);
+
+              if (success) {
+                completedTasks++;
+                this.completedTaskNames.push(taskToProcess.TASK_NAME); // Add to completed list
+                console.log(`✅ Successfully completed configured task: ${taskToProcess.TASK_NAME}`);
+
+                // Check if this task should block further processing
+                const hasWaitForCompletion = shouldWaitForTask(taskToProcess.TASK_NAME, taskConfig);
+                const delayAfterMs = getDelayAfterTask(taskToProcess.TASK_NAME, taskConfig);
+                console.log(`🔍 Post-completion check for "${taskToProcess.TASK_NAME}": waitForCompletion=${hasWaitForCompletion}, delayAfter=${delayAfterMs / 1000}s`);
+
+                if (hasWaitForCompletion) {
+                  this.waitingForTask = taskToProcess.TASK_NAME;
+                  console.log(`⏸️ Task \"${taskToProcess.TASK_NAME}\" requires waiting for completion before processing others`);
+
+                  // Check for delay after this task
+                  if (delayAfterMs > 0) {
+                    console.log(`⏳ Waiting ${delayAfterMs / 1000} seconds after \"${taskToProcess.TASK_NAME}\" completion...`);
+                    await flightDeckApiService.delay(delayAfterMs);
+                    console.log(`✅ Delay of ${delayAfterMs / 1000} seconds completed, ready for next processing cycle`);
+                    this.waitingForTask = null; // Clear wait flag after delay
+                  }
+
+                  console.log(`🛑 Exiting processing cycle due to waitForCompletion=true`);
+                  return; // Stop processing other tasks in this cycle
+                }
+
+                // Check for delay after this task (if not a blocking task)
+                if (delayAfterMs > 0) {
+                  console.log(`⏳ Waiting ${delayAfterMs / 1000} seconds after \"${taskToProcess.TASK_NAME}\" completion before next cycle...`);
+                  await flightDeckApiService.delay(delayAfterMs);
+                  console.log(`✅ Delay of ${delayAfterMs / 1000} seconds completed - ready for next processing cycle`);
+                }
+                
+                // STRICT PRIORITY: Exit cycle after completing ONE task to ensure proper sequencing
+                console.log(`🔄 [STRICT PRIORITY] Task completed - exiting cycle to re-evaluate priorities`);
+                return;
+              } else {
+                console.log(`❌ Failed to complete configured task: ${taskToProcess.TASK_NAME}`);
+                // Strict priority: stop processing if task fails
+                return;
+              }
+            } catch (error) {
+              console.error(`💥 Exception in processCompleteTask for ${taskToProcess.TASK_NAME}:`, error);
+              // Strict priority: stop processing if task throws
               return;
             }
-
-            // Sort tasks by priority (lower number = higher priority)
-            const sortedTasks = tasksReadyToProcess.sort((a, b) => 
-              getTaskPriority(a.TASK_NAME, taskConfig) - getTaskPriority(b.TASK_NAME, taskConfig)
-            );
-
-            console.log(`⚡ Starting to process ${sortedTasks.length} ready tasks (in priority order):`);
-            sortedTasks.forEach((task, index) => {
-              const priority = getTaskPriority(task.TASK_NAME, taskConfig);
-              const sequencing = taskConfig.taskSequencing?.[task.TASK_NAME];
-              const delayAfter = sequencing?.delayAfter || 0;
-              const waitFor = sequencing?.waitForCompletion || false;
-              console.log(`  ${index + 1}. ${task.TASK_NAME} (Priority: ${priority}, DelayAfter: ${delayAfter}s, WaitForCompletion: ${waitFor})`);
-            });
-
-            for (const task of sortedTasks) {
-              if (!this.isProcessing) break;
-
-              console.log(`🔄 Processing task: ${task.TASK_NAME} (ID: ${task.ID}, Status: ${task.TASK_STATUS})`);
-
-              this.updateStatus({
-                isProcessing: true,
-                currentTask: task.TASK_NAME,
-                totalTasks,
-                completedTasks,
-                failedTasks,
-                lastUpdate: new Date(),
-              });
-
-              // Check if task should be completed based on status
-              console.log(`🧭 Checking if task should be completed by status...`);
-              if (this.shouldCompleteTaskByStatus(task)) {
-                const isInCompletableList = shouldCompleteTask(task.TASK_NAME, taskConfig);
-                
-                // Skip tasks that are not in the completable list
-                if (!isInCompletableList) {
-                  console.log(`⏭️ Skipping task "${task.TASK_NAME}" - not in Task Configuration Manager list`);
-                  continue;
-                }
-                
-                console.log(`🚀 Processing configured task: ${task.TASK_NAME} (Status: ${task.TASK_STATUS})`);
-                
-                try {
-                  console.log(`🔧 About to call processCompleteTask for: ${task.TASK_NAME}`);
-                  const success = await this.processCompleteTask(task, orderForm, taskConfig);
-                  console.log(`📊 processCompleteTask result for ${task.TASK_NAME}: ${success}`);
-                  
-                  if (success) {
-                    completedTasks++;
-                    this.completedTaskNames.push(task.TASK_NAME); // Add to completed list
-                    console.log(`✅ Successfully completed configured task: ${task.TASK_NAME}`);
-                    
-                    // Check if this task should block further processing
-                    const hasWaitForCompletion = shouldWaitForTask(task.TASK_NAME, taskConfig);
-                    const delayAfterMs = getDelayAfterTask(task.TASK_NAME, taskConfig);
-                    console.log(`🔍 Post-completion check for "${task.TASK_NAME}": waitForCompletion=${hasWaitForCompletion}, delayAfter=${delayAfterMs / 1000}s`);
-                    
-                    if (hasWaitForCompletion) {
-                      this.waitingForTask = task.TASK_NAME;
-                      console.log(`⏸️ Task \"${task.TASK_NAME}\" requires waiting for completion before processing others`);
-                      
-                      // Check for delay after this task
-                      if (delayAfterMs > 0) {
-                        console.log(`⏳ Waiting ${delayAfterMs / 1000} seconds after \"${task.TASK_NAME}\" completion...`);
-                        await flightDeckApiService.delay(delayAfterMs);
-                        console.log(`✅ Delay of ${delayAfterMs / 1000} seconds completed, ready for next processing cycle`);
-                        this.waitingForTask = null; // Clear wait flag after delay
-                      }
-                      
-                      console.log(`🛑 Exiting processing cycle due to waitForCompletion=true`);
-                      return; // Stop processing other tasks in this cycle
-                    }
-                    
-                    // Check for delay after this task (if not a blocking task)
-                    // With delayAfter: wait BEFORE processing next task in THIS cycle (don't exit)
-                    if (delayAfterMs > 0) {
-                      console.log(`⏳ Waiting ${delayAfterMs / 1000} seconds after \"${task.TASK_NAME}\" completion before processing next task in this cycle...`);
-                      await flightDeckApiService.delay(delayAfterMs);
-                      console.log(`✅ Delay of ${delayAfterMs / 1000} seconds completed - continuing to next task in this cycle`);
-                      // Do NOT return here - continue to next task in the for loop
-                    } else {
-                      console.log(`➡️ No delay configured, continuing to next task in this cycle...`);
-                    }
-                  } else {
-                    console.log(`❌ Failed to complete configured task: ${task.TASK_NAME}`);
-                  }
-                } catch (error) {
-                  console.error(`💥 Exception in processCompleteTask for ${task.TASK_NAME}:`, error);
-                }
-              } else {
-                console.log(`⏭️ Skipping task: ${task.TASK_NAME} (Status: ${task.TASK_STATUS}) - not completable by status`);
-              }
-            }
+          } else {
+            console.log(`ℹ️ No tasks ready to process in this cycle`);
           }
         } else {
-          console.log('⏸️ No processable (ready/assigned/created) tasks found');
+          console.log('⏸️ No tasks found to process');
         }
 
         // Process failed tasks for retry (ALWAYS check, even if no processable tasks)
@@ -468,8 +508,13 @@ export class TaskProcessor {
 
       const taskDetails = detailsResult.data;
 
+      // Increment global task counter for ALL tasks (global sequential assignment)
+      this.globalTaskInstanceCounter++;
+      console.log(`📊 Processing task "${task.TASK_NAME}" - Global Instance #${this.globalTaskInstanceCounter}`);
+      console.log(`   This task will use device/port pair #${this.globalTaskInstanceCounter} (if placeholders are configured)`);
+
       // Check for mandatory fields and prepare data
-      const taskData = await this.prepareTaskData(taskDetails, orderForm, taskConfig);
+      const taskData = await this.prepareTaskData(taskDetails, orderForm, taskConfig, this.globalTaskInstanceCounter);
 
       // Update task data if needed
       if (taskData.needsUpdate) {
@@ -480,7 +525,9 @@ export class TaskProcessor {
         }
 
         // Add delay before completion to allow data to propagate
-        await flightDeckApiService.delay(2000);
+        // Wait 30 seconds to ensure FlightDeck finishes processing the field update
+        console.log(`⏳ Waiting 30 seconds for FlightDeck to process field updates...`);
+        await flightDeckApiService.delay(30000);
         
         // Re-fetch task details to verify updated data
         console.log(`🔍 Re-fetching task details to verify field updates...`);
@@ -574,8 +621,8 @@ export class TaskProcessor {
           
           if (updateResult.success) {
             console.log(`✅ Field data entered successfully for task: ${task.TASK_NAME}`);
-            console.log(`⏳ Waiting 15 seconds before retry action...`);
-            await flightDeckApiService.delay(15000);
+            console.log(`⏳ Waiting 30 seconds for FlightDeck to process field updates...`);
+            await flightDeckApiService.delay(30000);
           } else {
             console.error(`❌ Failed to enter field data for task ${task.TASK_NAME}:`, updateResult.error);
             console.error(`❌ Update result details:`, JSON.stringify(updateResult, null, 2));
@@ -728,23 +775,13 @@ export class TaskProcessor {
       const cleanFieldKey = fieldKey.replace(/\*$/, '');
       console.log(`   Clean field key (asterisk removed): "${cleanFieldKey}"`);
       
-      // Find the actual field in task details by field name OR label
-      let taskParam = taskDetails.taskInstParamRequestList.find(
-        param => param.name === cleanFieldKey
-      );
+      // Use mapLabelToFieldName to find the actual field (supports both field name and label)
+      const actualFieldName = mapLabelToFieldName(taskName, cleanFieldKey, taskDetails, true);
       
-      if (!taskParam) {
-        // Try finding by label
-        taskParam = taskDetails.taskInstParamRequestList.find(
-          param => param.jsonDescriptorObject?.label === cleanFieldKey
-        );
-        
-        if (taskParam) {
-          console.log(`   Found field by label match: "${cleanFieldKey}" → field name: "${taskParam.name}"`);
-        }
-      } else {
-        console.log(`   Found field by name match: "${cleanFieldKey}"`);
-      }
+      // Find the actual field in task details by the resolved field name
+      let taskParam = taskDetails.taskInstParamRequestList.find(
+        param => param.name === actualFieldName
+      );
       
       if (!taskParam) {
         console.warn(`⚠️ Configured field "${cleanFieldKey}" not found in task details by name or label`);
@@ -755,7 +792,17 @@ export class TaskProcessor {
       }
       
       // Check if the field value is null, undefined, or empty string
-      const currentValue = taskParam.value;
+      let currentValue = taskParam.value;
+      
+      // Special handling: If value is a date placeholder like {{currentDate}}, process it
+      if (typeof currentValue === 'string' && currentValue.includes('{{currentDate')) {
+        const processedDate = processDatePlaceholder(currentValue.trim());
+        if (processedDate) {
+          console.log(`📅 Processing date placeholder "${currentValue}" → "${processedDate}" for validation`);
+          currentValue = processedDate;
+        }
+      }
+      
       const isEmptyOrNull = currentValue === null || 
                            currentValue === undefined || 
                            currentValue === '' ||
@@ -763,7 +810,7 @@ export class TaskProcessor {
       
       if (isEmptyOrNull) {
         const fieldLabel = taskParam.jsonDescriptorObject?.label || cleanFieldKey;
-        console.error(`❌ Mandatory field "${fieldLabel}" (name: ${taskParam.name}) has no value (current: ${currentValue})`);
+        console.error(`❌ Mandatory field "${fieldLabel}" (name: ${taskParam.name}) has no value (current: ${taskParam.value})`);
         missingFields.push(fieldLabel);
       } else {
         console.log(`✅ Mandatory field "${cleanFieldKey}" (name: ${taskParam.name}) has value: ${currentValue}`);
@@ -788,7 +835,8 @@ export class TaskProcessor {
   private async prepareTaskData(
     taskDetails: TaskDetails,
     orderForm: OrderForm,
-    taskConfig: TaskManagementConfig
+    taskConfig: TaskManagementConfig,
+    taskInstanceNumber: number = 1
   ): Promise<{
     needsUpdate: boolean;
     updatePayload: any;
@@ -799,16 +847,63 @@ export class TaskProcessor {
     
     console.log(`📋 Preparing task data for: ${taskName}`);
     
-    // Check if task has configured field mappings in task config table
-    const hasFieldMappings = !!taskConfig.taskFieldMappings[trimmedTaskName];
-    
-    if (hasFieldMappings) {
-      console.log(`📝 Task ${taskName} has configured field mappings - will feed data from task config table`);
-    } else {
-      console.log(`🔧 Task ${taskName} has no configured field mappings - will proceed without field updates`);
+    // Defensive check for taskDetails structure
+    if (!taskDetails) {
+      console.error(`❌ taskDetails is undefined for task: ${taskName}`);
+      return { needsUpdate: false, updatePayload: null, completePayload };
     }
     
-    const needsUpdate = hasFieldMappings;
+    if (!taskDetails.taskInstParamRequestList) {
+      console.error(`❌ taskDetails.taskInstParamRequestList is undefined for task: ${taskName}`);
+      return { needsUpdate: false, updatePayload: null, completePayload };
+    }
+    
+    if (!Array.isArray(taskDetails.taskInstParamRequestList)) {
+      console.error(`❌ taskDetails.taskInstParamRequestList is not an array for task: ${taskName}`);
+      return { needsUpdate: false, updatePayload: null, completePayload };
+    }
+    
+    console.log(`✅ taskDetails structure valid. Processing ${taskDetails.taskInstParamRequestList.length} fields`);
+    
+    // Check if task has configured field mappings in task config table
+    // Try exact match first, then fallback to trimmed keys
+    let fieldMappings = taskConfig.taskFieldMappings[trimmedTaskName];
+    if (!fieldMappings && taskConfig.taskFieldMappings) {
+      for (const [key, value] of Object.entries(taskConfig.taskFieldMappings)) {
+        if (key.trim() === trimmedTaskName) {
+          console.log(`⚠️ Found field mappings but config key has extra spaces: "${key}"`);
+          fieldMappings = value;
+          break;
+        }
+      }
+    }
+    
+    // ALSO check for conditional rules
+    let conditionalRules = taskConfig.conditionalRules?.[trimmedTaskName];
+    if (!conditionalRules && taskConfig.conditionalRules) {
+      for (const [key, value] of Object.entries(taskConfig.conditionalRules)) {
+        if (key.trim() === trimmedTaskName) {
+          console.log(`⚠️ Found conditional rules but config key has extra spaces: "${key}"`);
+          conditionalRules = value;
+          break;
+        }
+      }
+    }
+    
+    const hasFieldMappings = !!fieldMappings;
+    const hasConditionalRules = !!conditionalRules && Array.isArray(conditionalRules) && conditionalRules.length > 0;
+    
+    if (hasFieldMappings && hasConditionalRules) {
+      console.log(`📝 Task ${taskName} has both field mappings AND conditional rules - will feed data from task config table`);
+    } else if (hasFieldMappings) {
+      console.log(`📝 Task ${taskName} has configured field mappings - will feed data from task config table`);
+    } else if (hasConditionalRules) {
+      console.log(`📝 Task ${taskName} has conditional rules (${conditionalRules!.length} rule(s)) - will feed data based on conditions`);
+    } else {
+      console.log(`🔧 Task ${taskName} has no configured field mappings or conditional rules - will proceed without field updates`);
+    }
+    
+    const needsUpdate = hasFieldMappings || hasConditionalRules;
     
     let updatePayload: any = null;
     let completePayload = {
@@ -822,15 +917,32 @@ export class TaskProcessor {
       const taskInstParamRequestList: any[] = [];
       
       console.log(`🔍 Processing ${taskDetails.taskInstParamRequestList.length} fields for update payload`);
-      console.log(`📋 Configured field mappings:`, Object.keys(taskConfig.taskFieldMappings[trimmedTaskName]).join(', '));
+      if (fieldMappings) {
+        console.log(`📋 Configured field mappings:`, Object.keys(fieldMappings).join(', '));
+      }
+      if (conditionalRules) {
+        console.log(`🔀 Configured conditional rules: ${conditionalRules.length} rule(s)`);
+      }
       
       for (const param of taskDetails.taskInstParamRequestList) {
+        // Defensive check: skip if param is undefined or null
+        if (!param) {
+          console.warn(`⚠️ Skipping undefined/null param in field processing loop`);
+          continue;
+        }
+        
+        // Defensive check: ensure param has a name property
+        if (!param.name) {
+          console.warn(`⚠️ Skipping param without 'name' property:`, param);
+          continue;
+        }
+        
         // Try to get field value by field name first, then by label
-        let fieldValue = getTaskFieldValue(taskName, param.name, taskConfig, orderForm, taskDetails);
+        let fieldValue = getTaskFieldValue(taskName, param.name, taskConfig, orderForm, taskDetails, taskInstanceNumber);
         
         // If no value found by field name, try by label
         if (!fieldValue && param.jsonDescriptorObject?.label) {
-          fieldValue = getTaskFieldValue(taskName, param.jsonDescriptorObject.label, taskConfig, orderForm, taskDetails);
+          fieldValue = getTaskFieldValue(taskName, param.jsonDescriptorObject.label, taskConfig, orderForm, taskDetails, taskInstanceNumber);
           if (fieldValue) {
             console.log(`🏷️ Found value for field '${param.name}' via label '${param.jsonDescriptorObject.label}': ${fieldValue}`);
           }
@@ -838,18 +950,36 @@ export class TaskProcessor {
         
         if (fieldValue) {
           console.log(`✅ Setting field '${param.name}' (label: '${param.jsonDescriptorObject?.label}') to '${fieldValue}' for update`);
-          taskInstParamRequestList.push({
-            ...param,
-            value: fieldValue,
-          });
+          
+          // Special handling for date picker fields
+          const paramType = param.type?.toLowerCase() || '';
+          const descriptorType = param.jsonDescriptorObject?.type?.toLowerCase() || '';
+          const isDateField = paramType === 'datepicker' || paramType === 'date' || paramType === 'isodate' || descriptorType === 'datepicker' || descriptorType === 'date';
+          
+          if (isDateField) {
+            console.log(`📅 Date field detected: ${param.name}, formatting for date picker`);
+            // For date picker fields, set both value and dateValue in ISO format
+            // Date should be in YYYY-MM-DD format already from processDatePlaceholder
+            const dateValue = fieldValue.includes('T') ? fieldValue : `${fieldValue}T00:00:00.000Z`;
+            taskInstParamRequestList.push({
+              ...param,
+              value: fieldValue, // Keep YYYY-MM-DD for display
+              dateValue: dateValue, // Add ISO format for API
+            });
+          } else {
+            taskInstParamRequestList.push({
+              ...param,
+              value: fieldValue,
+            });
+          }
         } else {
           // Log warning if this field is in the configured mappings but no value was found
-          const isConfigured = taskConfig.taskFieldMappings[trimmedTaskName][param.name] || 
-                              (param.jsonDescriptorObject?.label && taskConfig.taskFieldMappings[trimmedTaskName][param.jsonDescriptorObject.label]);
+          const isConfigured = (fieldMappings && fieldMappings[param.name]) || 
+                              (param.jsonDescriptorObject?.label && fieldMappings && fieldMappings[param.jsonDescriptorObject.label]);
           
           if (isConfigured) {
             console.warn(`⚠️ Field '${param.name}' (label: '${param.jsonDescriptorObject?.label}') is configured but getTaskFieldValue returned empty`);
-            console.warn(`   Configured value:`, taskConfig.taskFieldMappings[trimmedTaskName][param.name] || taskConfig.taskFieldMappings[trimmedTaskName][param.jsonDescriptorObject?.label || '']);
+            console.warn(`   Configured value:`, (fieldMappings && fieldMappings[param.name]) || (fieldMappings && fieldMappings[param.jsonDescriptorObject?.label || '']));
           } else {
             console.log(`⏭️ No configured value for field '${param.name}' (label: '${param.jsonDescriptorObject?.label}'), keeping existing value: ${param.value}`);
           }
@@ -860,7 +990,7 @@ export class TaskProcessor {
 
       console.log(`📊 Update payload will include ${taskInstParamRequestList.length} fields`);
       console.log(`📋 Fields with configured values:`, taskInstParamRequestList
-        .filter(p => p.value)
+        .filter(p => p && p.value) // Filter out undefined/null and empty values
         .map(p => `${p.name}=${p.value}`)
         .join(', '));
 
@@ -919,6 +1049,18 @@ export class TaskProcessor {
 
     // Add any required field values to completion payload
     for (const param of taskDetails.taskInstParamRequestList) {
+      // Defensive check: skip if param is undefined or null
+      if (!param) {
+        console.warn(`⚠️ Skipping undefined/null param in completion payload loop`);
+        continue;
+      }
+      
+      // Defensive check: ensure param has a name property
+      if (!param.name) {
+        console.warn(`⚠️ Skipping param without 'name' property in completion payload:`, param);
+        continue;
+      }
+      
       // Skip if already added
       if (completePayload.paramRequests.some(p => p.name === param.name)) {
         continue;
@@ -932,21 +1074,30 @@ export class TaskProcessor {
           header: param.header,
           name: param.name,
           value: param.value,
-          editable: param.jsonDescriptorObject.editable,
+          editable: param.jsonDescriptorObject?.editable ?? true,
           jsonDescriptorObject: param.jsonDescriptorObject,
         });
-      } else if (taskConfig.taskFieldMappings[trimmedTaskName]) {
-        // Fallback to configured values for mapped tasks
-        const fieldValue = getTaskFieldValue(taskName, param.name, taskConfig, orderForm, taskDetails);
+      } else if (hasFieldMappings || hasConditionalRules) {
+        // Fallback to configured values for mapped tasks OR conditional rules
+        const fieldValue = getTaskFieldValue(taskName, param.name, taskConfig, orderForm, taskDetails, taskInstanceNumber);
         
-        if (fieldValue && param.jsonDescriptorObject?.required) {
-          console.log(`Adding configured field '${param.name}' with value '${fieldValue}' to completion payload`);
+        // Also try by label if no value found by name
+        const fieldValueByLabel = !fieldValue && param.jsonDescriptorObject?.label
+          ? getTaskFieldValue(taskName, param.jsonDescriptorObject.label, taskConfig, orderForm, taskDetails, taskInstanceNumber)
+          : null;
+        
+        const finalFieldValue = fieldValue || fieldValueByLabel;
+        
+        // Add field if we have a configured value (regardless of whether it's required)
+        // This ensures conditional rule fields are always populated
+        if (finalFieldValue) {
+          console.log(`Adding configured field '${param.name}' (label: '${param.jsonDescriptorObject?.label}') with value '${finalFieldValue}' to completion payload`);
           completePayload.paramRequests.push({
             type: param.type || 'text',
             header: param.header,
             name: param.name,
-            value: fieldValue,
-            editable: param.jsonDescriptorObject.editable,
+            value: finalFieldValue,
+            editable: param.jsonDescriptorObject?.editable ?? true,
             jsonDescriptorObject: param.jsonDescriptorObject,
           });
         }

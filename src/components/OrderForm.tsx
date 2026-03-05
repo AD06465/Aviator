@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { OrderForm, Workgroup, WorkgroupResponse, UserWorkgroup } from '../types';
+import { OrderForm, Workgroup, WorkgroupResponse, UserWorkgroup, DevicePortPair } from '../types';
 import { workflowTypes, defaultDevices } from '../lib/taskConfig';
 import { flightDeckApiService } from '../lib/api';
 import DeviceManager from './DeviceManager';
+import MultiDevicePortManager from './MultiDevicePortManager';
 
 interface OrderFormProps {
   onSubmit: (orderForm: OrderForm) => void;
@@ -21,6 +22,7 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
     preferredPort: '',
     portSpeed: '', // Display format
     portSpeedMbps: undefined, // Numeric format for API
+    devicePortPairs: [], // Multi-device/port configuration
     userCuid: '',
     userFullName: '',
     userEmail: '',
@@ -849,28 +851,23 @@ const OrderFormComponent: React.FC<OrderFormProps> = ({ onSubmit, isProcessing }
           selectedPort={formData.preferredPort || ''}
           onDeviceChange={(device) => handleInputChange('preferredDevice', device)}
           onPortChange={(port) => handleInputChange('preferredPort', port)}
+          onPortSpeedChange={(speed) => handleInputChange('portSpeedMbps', speed)}
           environment={formData.environment}
           portSpeedMbps={formData.portSpeedMbps}
         />
 
+        {/* Multi-Device/Port Manager for Duplicate Tasks */}
+        <MultiDevicePortManager
+          environment={formData.environment}
+          portSpeedMbps={formData.portSpeedMbps || 10000}
+          onDevicePortPairsChange={(pairs) => {
+            setFormData(prev => ({ ...prev, devicePortPairs: pairs }));
+          }}
+          initialPairs={formData.devicePortPairs || []}
+        />
+
         {/* Submit Button */}
         <div className="flex flex-col space-y-3">
-          {/* Validation Messages */}
-          {!isFormValid() && (
-            <div className="text-sm text-gray-600 bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <div className="font-medium text-gray-800 mb-2">Required to start automation:</div>
-              <ul className="space-y-1">
-                {!formData.orderNumber && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Order Number</span></li>}
-                {!formData.productName && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Product Name</span></li>}
-                {!formData.workflowName && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Workflow Name</span></li>}
-                {!formData.userName && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Username (CUID)</span></li>}
-                {formData.userName && !userNameConfirmed && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Confirm Username (click "Confirm User" button)</span></li>}
-                {userNameConfirmed && workgroups.length === 0 && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Valid workgroup (no workgroups found for user)</span></li>}
-                {userNameConfirmed && workgroups.length > 0 && !formData.workgroup && <li className="flex items-center space-x-2"><span className="text-red-500">•</span><span>Select a workgroup</span></li>}
-              </ul>
-            </div>
-          )}
-          
           <div className="flex justify-end">
             <button
               type="submit"

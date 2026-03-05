@@ -95,7 +95,7 @@ function getAutopilotBaseUrl(environment: string): string {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { environment, orderNumber } = body;
+    const { environment, orderNumber, includeChildren = true } = body;
 
     if (!environment || !orderNumber) {
       return NextResponse.json(
@@ -116,12 +116,14 @@ export async function POST(request: NextRequest) {
 
     // Fetch workflows using Basic authentication (username:password)
     const baseUrl = getAutopilotBaseUrl(environment);
-    // Updated URL with contains[description] parameter as per original requirement
-    const workflowUrl = `${baseUrl}/operations-manager/jobs?exclude=transitions,variables,tasks&limit=100&order=-1&skip=0&sort=metrics.start_time&contains[description]="${orderNumber}"`;
+    // Conditionally include parent-only filter based on includeChildren parameter
+    const parentFilter = includeChildren ? '' : '&exists[parent]=false';
+    const workflowUrl = `${baseUrl}/operations-manager/jobs?exclude=transitions,variables&limit=1000&order=-1&skip=0&sort=metrics.start_time&contains[description]="${orderNumber}"&equals[type]=automation${parentFilter}`;
     
-    console.log('🔍 Fetching workflows from Autopilot:', {
+    console.log(`🔍 Fetching ${includeChildren ? 'ALL' : 'PARENT'} workflows from Autopilot (up to 1000):`, {
       environment,
       orderNumber,
+      includeChildren,
       url: workflowUrl
     });
     

@@ -123,7 +123,7 @@ class FlightDeckApiService {
     this.currentEnvironment = this.getEnvironments()[0]; // Default to Test 1
     this.api = axios.create({
       baseURL: this.currentEnvironment.apiUrl, // Set initial base URL
-      timeout: 30000,
+      timeout: 120000, // Increased to 2 minutes to avoid premature timeouts
       headers: {
         'Content-Type': 'application/json',
       },

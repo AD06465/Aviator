@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ErrorDetailModal from './ErrorDetailModal';
+import WorkflowTree from './WorkflowTree';
 import { autopilotWorkflowService } from '@/lib/api';
 import { AutopilotWorkflow } from '@/types';
 import {
@@ -19,6 +20,7 @@ interface AutopilotMonitorProps {
 }
 
 type WorkflowStatus = 'running' | 'complete' | 'canceled' | 'paused' | 'error';
+type ViewMode = 'list' | 'hierarchy';
 
 // Authentic Pronghorn Operations Manager color scheme
 const statusColors: Record<WorkflowStatus, string> = {
@@ -29,13 +31,25 @@ const statusColors: Record<WorkflowStatus, string> = {
   error: 'text-[#DC3545]',
 };
 
-const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, environment, isActive = true }) => {
+const AutopilotMonitor = ({ orderNumber, environment, isActive = true }: AutopilotMonitorProps) => {
   const [workflows, setWorkflows] = useState<AutopilotWorkflow[]>([]);
   const [groupedWorkflows, setGroupedWorkflows] = useState<Record<string, AutopilotWorkflow[]>>({});
   const [activeTab, setActiveTab] = useState<WorkflowStatus>('running');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [selectedWorkflowForHierarchy, setSelectedWorkflowForHierarchy] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
+  
+  // Pagination state - track current page for each status
+  const [currentPages, setCurrentPages] = useState<Record<WorkflowStatus, number>>({
+    running: 1,
+    complete: 1,
+    canceled: 1,
+    paused: 1,
+    error: 1,
+  });
+  const WORKFLOWS_PER_PAGE = 100;
   
   // Column widths state (resizable columns)
   const [columnWidths, setColumnWidths] = useState({
@@ -87,6 +101,40 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
   }, [selectedErrorWorkflow, errorModalOpen]);
 
   // Handle column resize
+  // Parse workflow name from description
+  const parseWorkflowName = (workflow: AutopilotWorkflow): string => {
+    // If name is not generic, use it
+    if (workflow.name && !workflow.name.includes('POM_GPOM_GetLatestTaskDetails')) {
+      return workflow.name;
+    }
+    
+    // Parse description for workflow type
+    const description = typeof workflow.description === 'string' 
+      ? workflow.description 
+      : '';
+    
+    if (!description) return workflow.name || 'Unnamed Workflow';
+    
+    // Pattern: AP-556172356-464251366-MON-2-0-352933489-1-OFFNET-v0
+    // Extract workflow type from description
+    const patterns = [
+      { regex: /-MON-.*-ONNET/, name: 'Monarch Onnet' },
+      { regex: /-MON-.*-OFFNET/, name: 'Monarch Offnet' },
+      { regex: /-COLORLESS/, name: 'Colorless' },
+      { regex: /ONNET/, name: 'Onnet Order' },
+      { regex: /OFFNET/, name: 'Offnet Order' },
+      { regex: /GetLatestTaskDetails/, name: 'Task Status Check' },
+    ];
+    
+    for (const pattern of patterns) {
+      if (pattern.regex.test(description)) {
+        return pattern.name;
+      }
+    }
+    
+    return workflow.name || 'Workflow';
+  };
+
   const handleMouseDown = (column: string, e: React.MouseEvent) => {
     setResizing(column);
     setStartX(e.clientX);
@@ -130,9 +178,11 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
     setError(null);
 
     try {
-      // Credentials are handled securely on the server-side
-      const data = await fetchAutopilotWorkflows(environment, orderNumber);
-      console.log('🔍 Setting workflows in state:', {
+      // For list view: fetch ALL workflows (parent + children)
+      // For hierarchy view: fetch only PARENT workflows for dropdown selection
+      const includeChildren = viewMode === 'list';
+      const data = await fetchAutopilotWorkflows(environment, orderNumber, includeChildren);
+      console.log(`🔍 Setting workflows in state (${viewMode} mode, includeChildren=${includeChildren}):`, {
         workflowCount: data.length,
         firstWorkflow: data[0] ? {
           id: data[0]._id,
@@ -173,7 +223,7 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
     } finally {
       setLoading(false);
     }
-  }, [currentEnv, orderNumber, environment]);
+  }, [currentEnv, orderNumber, environment, viewMode]);
 
   // Initial fetch
   useEffect(() => {
@@ -196,24 +246,9 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
     return () => clearInterval(interval);
   }, [orderNumber, isActive, fetchWorkflows]);
 
-  if (!orderNumber) {
-    return (
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
-        <p className="text-yellow-800">Please enter an Order Number to view Autopilot workflows.</p>
-      </div>
-    );
-  }
-
-  if (!currentEnv) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
-        <p className="text-red-800">Invalid environment selected. Please select a valid environment.</p>
-      </div>
-    );
-  }
-
+  // Helper functions and constants
   const renderWorkflowRow = (workflow: AutopilotWorkflow) => {
-    const workflowUrl = buildAutopilotWorkflowUrl(currentEnv.baseUrl, workflow._id);
+    const workflowUrl = buildAutopilotWorkflowUrl(currentEnv!.baseUrl, workflow._id);
     const duration = calculateWorkflowDuration(workflow.metrics?.start_time, workflow.metrics?.end_time);
     const progress = workflow.metrics?.progress !== undefined ? Math.round(workflow.metrics.progress * 100) : null;
     
@@ -251,7 +286,6 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
             )}
           </span>
         </td>
-      {/* Error Detail Modal moved to top level below */}
 
         {/* Workflow Name */}
         <td className="px-5 py-4" style={{ width: columnWidths.name }}>
@@ -259,12 +293,12 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
             href={workflowUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[#007BFF] hover:text-[#0056b3] hover:underline font-normal"
+            className="text-[#007BFF] hover:text-[#0056b3] hover:underline font-normal font-medium"
           >
-            {workflow.name || 'Unnamed Workflow'}
+            {parseWorkflowName(workflow)}
           </a>
           {description && (
-            <p className="text-xs text-[#6C757D] mt-1 truncate">{description}</p>
+            <p className="text-xs text-[#6C757D] mt-1 truncate" title={description}>{description}</p>
           )}
         </td>
 
@@ -313,8 +347,67 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
     { status: 'error', label: 'Error' },
   ];
 
+  // Pagination helper functions
+  const getCurrentPageWorkflows = (status: WorkflowStatus): AutopilotWorkflow[] => {
+    const statusWorkflows = groupedWorkflows[status] || [];
+    const currentPage = currentPages[status];
+    const startIndex = (currentPage - 1) * WORKFLOWS_PER_PAGE;
+    const endIndex = startIndex + WORKFLOWS_PER_PAGE;
+    return statusWorkflows.slice(startIndex, endIndex);
+  };
+
+  const getTotalPages = (status: WorkflowStatus): number => {
+    const statusWorkflows = groupedWorkflows[status] || [];
+    return Math.ceil(statusWorkflows.length / WORKFLOWS_PER_PAGE);
+  };
+
+  const handlePageChange = (status: WorkflowStatus, newPage: number) => {
+    setCurrentPages(prev => ({
+      ...prev,
+      [status]: newPage,
+    }));
+  };
+
+  const handlePrevPage = () => {
+    const currentPage = currentPages[activeTab];
+    if (currentPage > 1) {
+      handlePageChange(activeTab, currentPage - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    const currentPage = currentPages[activeTab];
+    const totalPages = getTotalPages(activeTab);
+    if (currentPage < totalPages) {
+      handlePageChange(activeTab, currentPage + 1);
+    }
+  };
+
+  // Reset to page 1 when changing tabs
+  const handleTabChange = (status: WorkflowStatus) => {
+    setActiveTab(status);
+    // Don't reset page - preserve user's position
+  };
+
+  // Early returns for invalid states
+  if (!orderNumber) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-center">
+        <p className="text-yellow-800">Please enter an Order Number to view Autopilot workflows.</p>
+      </div>
+    );
+  }
+
+  if (!currentEnv) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center">
+        <p className="text-red-800">Invalid environment selected. Please select a valid environment.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 font-[Inter,Roboto,system-ui,sans-serif]">
+    <div className="space-y-6">
       {/* Header with refresh info - Pronghorn style */}
       <div className="flex items-center justify-between bg-white border border-[#DDDDDD] rounded p-5 shadow-sm">
         <div>
@@ -381,10 +474,72 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
         </div>
       )}
 
-      {/* Tabs - Clean professional design */}
-      <div className="bg-white border-b-2 border-[#DDDDDD]">
-        <div className="grid grid-cols-5">
-          {tabs.map(({ status, label }) => {
+      {/* View Mode Toggle */}
+      <div className="bg-white border border-[#DDDDDD] rounded p-4 shadow-sm">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-semibold text-[#242444]">View:</span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-4 py-2 rounded transition-all ${
+                viewMode === 'list'
+                  ? 'bg-[#007BFF] text-white shadow-sm'
+                  : 'bg-[#F8F9FA] text-[#6C757D] hover:bg-[#E9ECEF]'
+              }`}
+            >
+              📋 List View
+            </button>
+            <button
+              onClick={() => setViewMode('hierarchy')}
+              className={`px-4 py-2 rounded transition-all ${
+                viewMode === 'hierarchy'
+                  ? 'bg-[#007BFF] text-white shadow-sm'
+                  : 'bg-[#F8F9FA] text-[#6C757D] hover:bg-[#E9ECEF]'
+              }`}
+            >
+              🌳 Hierarchy View
+            </button>
+          </div>
+          {viewMode === 'hierarchy' && workflows.length > 0 && (
+            <div className="ml-auto">
+              <label className="text-sm text-[#6C757D] mr-2">Select Root Workflow:</label>
+              <select
+                value={selectedWorkflowForHierarchy || ''}
+                onChange={(e) => setSelectedWorkflowForHierarchy(e.target.value)}
+                className="border border-[#DDDDDD] rounded px-3 py-2 text-sm"
+              >
+                <option value="">-- Select a workflow --</option>
+                {workflows.map((wf) => (
+                  <option key={wf._id} value={wf._id}>
+                    {wf.name} ({wf.status})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Hierarchy View */}
+      {viewMode === 'hierarchy' && selectedWorkflowForHierarchy ? (
+        <WorkflowTree
+          rootJobId={selectedWorkflowForHierarchy}
+          environment={environment}
+          orderNumber={orderNumber}
+        />
+      ) : viewMode === 'hierarchy' ? (
+        <div className="bg-white border border-[#DDDDDD] rounded p-12 text-center shadow-sm">
+          <p className="text-[#6C757D] text-lg">Please select a root workflow from the dropdown above to view its hierarchy</p>
+        </div>
+      ) : null}
+
+      {/* List View - Tabs and Table */}
+      {viewMode === 'list' && (
+        <>
+          {/* Tabs - Clean professional design */}
+          <div className="bg-white border-b-2 border-[#DDDDDD]">
+            <div className="grid grid-cols-5">
+              {tabs.map(({ status, label }) => {
             const count = groupedWorkflows[status]?.length || 0;
             const isActive = activeTab === status;
             
@@ -402,7 +557,7 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
             return (
               <button
                 key={status}
-                onClick={() => setActiveTab(status)}
+                onClick={() => handleTabChange(status)}
                 className={`
                   px-4 py-3 border-b-3 transition-all duration-200
                   ${isActive 
@@ -438,55 +593,97 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
             <LoadingSpinner />
           </div>
         ) : groupedWorkflows[activeTab]?.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
-              <thead className="bg-[#F8F9FA] border-b border-[#DDDDDD]">
-                <tr>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.status }}>
-                    Status
-                    <div
-                      className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
-                      onMouseDown={(e) => handleMouseDown('status', e)}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.name }}>
-                    Workflow Name
-                    <div
-                      className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
-                      onMouseDown={(e) => handleMouseDown('name', e)}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.progress }}>
-                    Progress
-                    <div
-                      className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
-                      onMouseDown={(e) => handleMouseDown('progress', e)}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.started }}>
-                    Started
-                    <div
-                      className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
-                      onMouseDown={(e) => handleMouseDown('started', e)}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.duration }}>
-                    Duration
-                    <div
-                      className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
-                      onMouseDown={(e) => handleMouseDown('duration', e)}
-                    />
-                  </th>
-                  <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative" style={{ width: columnWidths.id }}>
-                    ID
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white">
-                {groupedWorkflows[activeTab].map(renderWorkflowRow)}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full table-fixed">
+                <thead className="bg-[#F8F9FA] border-b border-[#DDDDDD]">
+                  <tr>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.status }}>
+                      Status
+                      <div
+                        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
+                        onMouseDown={(e) => handleMouseDown('status', e)}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.name }}>
+                      Workflow Name
+                      <div
+                        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
+                        onMouseDown={(e) => handleMouseDown('name', e)}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.progress }}>
+                      Progress
+                      <div
+                        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
+                        onMouseDown={(e) => handleMouseDown('progress', e)}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.started }}>
+                      Started
+                      <div
+                        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
+                        onMouseDown={(e) => handleMouseDown('started', e)}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative group" style={{ width: columnWidths.duration }}>
+                      Duration
+                      <div
+                        className="absolute top-0 right-0 h-full w-1 cursor-col-resize hover:bg-[#007BFF] group-hover:bg-[#007BFF]/30"
+                        onMouseDown={(e) => handleMouseDown('duration', e)}
+                      />
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-[#242444] uppercase tracking-wide relative" style={{ width: columnWidths.id }}>
+                      ID
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {getCurrentPageWorkflows(activeTab).map(renderWorkflowRow)}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination controls */}
+            {getTotalPages(activeTab) > 1 && (
+              <div className="border-t border-[#DDDDDD] bg-[#F8F9FA] px-5 py-4">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-[#6C757D]">
+                    Showing {((currentPages[activeTab] - 1) * WORKFLOWS_PER_PAGE) + 1} - {Math.min(currentPages[activeTab] * WORKFLOWS_PER_PAGE, groupedWorkflows[activeTab].length)} of {groupedWorkflows[activeTab].length} workflows
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handlePrevPage}
+                      disabled={currentPages[activeTab] === 1}
+                      className="px-4 py-2 bg-white border border-[#DDDDDD] rounded text-[#333333] hover:bg-[#E9ECEF] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                      title="Previous page"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                      <span className="text-sm font-medium">Previous</span>
+                    </button>
+                    
+                    <div className="text-sm text-[#333333] font-medium px-4">
+                      Page {currentPages[activeTab]} of {getTotalPages(activeTab)}
+                    </div>
+                    
+                    <button
+                      onClick={handleNextPage}
+                      disabled={currentPages[activeTab] === getTotalPages(activeTab)}
+                      className="px-4 py-2 bg-white border border-[#DDDDDD] rounded text-[#333333] hover:bg-[#E9ECEF] disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                      title="Next page"
+                    >
+                      <span className="text-sm font-medium">Next</span>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <div className="bg-[#F8F9FA] border-t border-[#DDDDDD] p-12 text-center">
             <p className="text-[#6C757D]">No {activeTab} workflows found for this order.</p>
@@ -516,6 +713,10 @@ const AutopilotMonitor: React.FC<AutopilotMonitorProps> = ({ orderNumber, enviro
           })}
         </div>
       </div>
+        </>
+      )}
+
+      {/* Error Detail Modal - Available in both views */}
       <ErrorDetailModal
         open={errorModalOpen}
         onClose={() => setErrorModalOpen(false)}

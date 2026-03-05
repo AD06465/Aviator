@@ -18,6 +18,18 @@ export default function BackupManager() {
     setMetadata(meta);
   };
 
+  const getBackupDetails = () => {
+    const backup = DataBackupManager.getLatestBackup();
+    if (!backup) return null;
+    
+    return {
+      deviceCount: backup.devices?.length || 0,
+      workflowCount: backup.customAttributes?.itentialWorkflows?.length || 0,
+      productCount: backup.customAttributes?.productNames?.length || 0,
+      taskCount: backup.taskConfig?.completableTasks?.length || 0,
+    };
+  };
+
   const handleCreateBackup = () => {
     try {
       DataBackupManager.createBackup();
@@ -166,6 +178,31 @@ export default function BackupManager() {
             </div>
           </div>
 
+          {/* Backup Details */}
+          {(() => {
+            const details = getBackupDetails();
+            return details ? (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="text-lg font-semibold text-blue-600">{details.deviceCount}</div>
+                  <div className="text-xs text-blue-800">Devices</div>
+                </div>
+                <div className="bg-purple-50 rounded-lg p-3 border border-purple-200">
+                  <div className="text-lg font-semibold text-purple-600">{details.workflowCount}</div>
+                  <div className="text-xs text-purple-800">Workflow Names</div>
+                </div>
+                <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                  <div className="text-lg font-semibold text-green-600">{details.productCount}</div>
+                  <div className="text-xs text-green-800">Product Names</div>
+                </div>
+                <div className="bg-orange-50 rounded-lg p-3 border border-orange-200">
+                  <div className="text-lg font-semibold text-orange-600">{details.taskCount}</div>
+                  <div className="text-xs text-orange-800">Task Configs</div>
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-3 mb-6">
             <button
@@ -224,6 +261,45 @@ export default function BackupManager() {
             </button>
           </div>
 
+          {/* Default Config Section */}
+          <div className="mb-6 p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border-2 border-cyan-200 rounded-lg">
+            <div className="flex items-start gap-3 mb-3">
+              <span className="text-2xl">🚀</span>
+              <div className="flex-1">
+                <h3 className="font-bold text-cyan-900 text-lg mb-1">Quick Start for New Users</h3>
+                <p className="text-sm text-cyan-800 mb-3">
+                  Import the default configuration file to quickly set up common tasks, workflows, and product names.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <a
+                href="/default-aviator-config.json"
+                download="default-aviator-config.json"
+                className="flex-1 px-4 py-3 bg-cyan-600 text-white rounded-md hover:bg-cyan-700 transition-colors font-medium flex items-center justify-center gap-2"
+              >
+                <span>📥</span>
+                Download Default Config
+              </a>
+              <label className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 cursor-pointer">
+                <span>📤</span>
+                Import Default Config
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleImportBackup}
+                  className="hidden"
+                />
+              </label>
+            </div>
+            <div className="mt-3 text-xs text-cyan-700 bg-cyan-100 p-2 rounded">
+              <strong>Includes:</strong> Pre-configured tasks (9 completable, 5 retryable), 
+              3 workflow names (Monarch Onnet, Monarch Offnet, Colorless), 
+              6 product names (DIA, ELINE, ELAN, ELYNK, IPVPN, UNI), 
+              and conditional rules examples.
+            </div>
+          </div>
+
           {/* Information Panel */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
@@ -258,7 +334,7 @@ export default function BackupManager() {
               <div className="flex items-start gap-2">
                 <span className="font-semibold min-w-[140px]">Data Protected:</span>
                 <span>
-                  Device configurations, task settings, and all mandatory field mappings
+                  Device configurations, task settings, workflow names, product names, and all mandatory field mappings
                 </span>
               </div>
             </div>
