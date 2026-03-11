@@ -234,8 +234,15 @@ export class TaskProcessor {
           for (const task of sortedTasks) {
             if (!this.isProcessing) return;
 
-            // Check if task is in completable list
+            // Check if task is in completable list (NOT retryable - those are handled separately)
             const isInCompletableList = shouldCompleteTask(task.TASK_NAME, taskConfig);
+            const isRetryableOnly = !isInCompletableList && shouldRetryTask(task.TASK_NAME, taskConfig);
+            
+            if (isRetryableOnly) {
+              console.log(`⏭️ Skipping task "${task.TASK_NAME}" - configured as retry-only task (will be handled in retry flow)`);
+              continue; // Skip retry-only tasks in normal flow
+            }
+            
             if (!isInCompletableList) {
               console.log(`⏭️ Skipping task "${task.TASK_NAME}" - not in Task Configuration Manager list (trying next task)`);
               console.log(`📋 Current completable tasks:`, taskConfig.completableTasks);
@@ -323,37 +330,42 @@ export class TaskProcessor {
           console.log('⏸️ No tasks found to process');
         }
 
-        // Process failed tasks for retry (ALWAYS check, even if no processable tasks)
-        console.log(`🔍 Checking for failed tasks to retry...`);
-        const allFailedTasks = tasks.filter(t => t.TASK_STATUS.toLowerCase() === 'failed');
-        console.log(`Found ${allFailedTasks.length} failed tasks total:`, allFailedTasks.map(t => `${t.TASK_NAME} (${t.TASK_STATUS})`));
-        
-        const currentFailedTasks = allFailedTasks.filter(t => 
+        // Process retryable tasks (ANY status: Ready/Assigned/Created/Failed)
+        console.log(`🔍 Checking for retryable tasks in any status...`);
+        const retryableStatuses = ['ready', 'assigned', 'created', 'failed'];
+        const allRetryableTasks = tasks.filter(t => 
+          retryableStatuses.includes(t.TASK_STATUS.toLowerCase()) &&
           shouldRetryTask(t.TASK_NAME, taskConfig)
         );
-        console.log(`Found ${currentFailedTasks.length} retryable failed tasks:`, currentFailedTasks.map(t => `${t.TASK_NAME} (ID: ${t.ID})`));
+        console.log(`Found ${allRetryableTasks.length} retryable tasks in processable statuses:`, allRetryableTasks.map(t => `${t.TASK_NAME} (Status: ${t.TASK_STATUS}, ID: ${t.ID})`));
 
-        // Sort failed tasks by ID (descending) to retry latest failed tasks first
-        const sortedFailedTasks = [...currentFailedTasks].sort((a, b) => {
-          // Assuming higher task ID = more recent task
+        // Sort retryable tasks by priority and then by ID (descending) to retry latest first
+        const sortedRetryableTasks = [...allRetryableTasks].sort((a, b) => {
+          // First sort by priority
+          const priorityA = getTaskPriority(a.TASK_NAME, taskConfig);
+          const priorityB = getTaskPriority(b.TASK_NAME, taskConfig);
+          if (priorityA !== priorityB) {
+            return priorityA - priorityB; // Lower priority number = higher priority
+          }
+          // Then by ID (descending) for same priority
           const idA = parseInt(a.ID) || 0;
           const idB = parseInt(b.ID) || 0;
           return idB - idA; // Descending order (latest first)
         });
         
-        if (sortedFailedTasks.length > 0) {
-          console.log(`📊 Retry order (latest first):`, sortedFailedTasks.map(t => `${t.TASK_NAME} (ID: ${t.ID})`));
+        if (sortedRetryableTasks.length > 0) {
+          console.log(`📊 Retry order (by priority, then latest first):`, sortedRetryableTasks.map(t => `${t.TASK_NAME} (Priority: ${getTaskPriority(t.TASK_NAME, taskConfig)}, Status: ${t.TASK_STATUS}, ID: ${t.ID})`));
         }
 
-        for (const task of sortedFailedTasks) {
+        for (const task of sortedRetryableTasks) {
           if (!this.isProcessing) break;
 
-          console.log(`🔄 Checking retry for failed task: ${task.TASK_NAME} (ID: ${task.ID}, Ignorable: ${isIgnorableFailedTask(task.TASK_NAME)})`);
+          console.log(`🔄 Processing retryable task: ${task.TASK_NAME} (ID: ${task.ID}, Status: ${task.TASK_STATUS}, Ignorable: ${isIgnorableFailedTask(task.TASK_NAME)})`);
           if (!isIgnorableFailedTask(task.TASK_NAME)) {
-            console.log(`🚀 Attempting to retry failed task: ${task.TASK_NAME}`);
+            console.log(`🚀 Attempting to retry task: ${task.TASK_NAME} (Status: ${task.TASK_STATUS})`);
             this.updateStatus({
               isProcessing: true,
-              currentTask: `Retrying: ${task.TASK_NAME}`,
+              currentTask: `Retrying: ${task.TASK_NAME} (${task.TASK_STATUS})`,
               totalTasks,
               completedTasks,
               failedTasks,
@@ -832,6 +844,118 @@ export class TaskProcessor {
     return { isValid, missingFields };
   }
 
+  /**
+   * Handle table row selection for tasks with data tables
+   * Extracts rows from task details and selects based on configuration
+   */
+  private selectTableRow(
+    fieldConfig: any,
+    param: TaskParameter,
+    taskDetails: TaskDetails
+  ): string | null {
+    try {
+      console.log(`📊 Processing table field: ${param.name}`);
+      
+      // FlightDeck tables have:
+      // 1. A tableDefinition field with the table structure
+      // 2. Multiple tableData fields with names like "0001", "0002", etc.
+      // We need to find the table header from the definition and then find all tableData rows
+      
+      const tableHeader = param.header || param.name;
+      console.log(`📊 Looking for table rows with header: "${tableHeader}"`);
+      
+      // Find all tableData rows for this table
+      const tableDataRows = taskDetails.taskInstParamRequestList.filter(p => 
+        p.type === 'tableData' && p.header === tableHeader
+      );
+      
+      console.log(`📊 Found ${tableDataRows.length} table data rows`);
+      
+      if (tableDataRows.length === 0) {
+        console.error(`❌ No table data rows found for table: ${tableHeader}`);
+        return null;
+      }
+
+      const selectionMode = fieldConfig.tableRowSelection || 'first';
+      let selectedRowName: string | null = null;
+
+      switch (selectionMode) {
+        case 'first':
+          selectedRowName = tableDataRows[0].name;
+          console.log(`✅ Selected first row: ${selectedRowName}`);
+          break;
+
+        case 'last':
+          selectedRowName = tableDataRows[tableDataRows.length - 1].name;
+          console.log(`✅ Selected last row: ${selectedRowName}`);
+          break;
+
+        case 'index':
+          const index = fieldConfig.tableRowIndex || 0;
+          if (index >= 0 && index < tableDataRows.length) {
+            selectedRowName = tableDataRows[index].name;
+            console.log(`✅ Selected row at index ${index}: ${selectedRowName}`);
+          } else {
+            console.error(`❌ Invalid row index ${index}, table has ${tableDataRows.length} rows`);
+            // Fallback to first row
+            selectedRowName = tableDataRows[0].name;
+            console.log(`⚠️ Falling back to first row: ${selectedRowName}`);
+          }
+          break;
+
+        case 'criteria':
+          const columnName = fieldConfig.tableColumnName;
+          const columnValue = fieldConfig.tableColumnValue;
+          
+          if (!columnName || !columnValue) {
+            console.error(`❌ Criteria selection requires tableColumnName and tableColumnValue`);
+            selectedRowName = tableDataRows[0].name;
+            console.log(`⚠️ Falling back to first row: ${selectedRowName}`);
+            break;
+          }
+
+          // Search through table rows for matching criteria
+          for (const row of tableDataRows) {
+            try {
+              // Parse the row value JSON
+              const rowData = JSON.parse(row.value || '{}');
+              
+              // Check if the specified column contains the search value
+              if (rowData[columnName]) {
+                const cellValue = String(rowData[columnName]).toLowerCase();
+                const searchValue = columnValue.toLowerCase();
+                
+                if (cellValue.includes(searchValue)) {
+                  selectedRowName = row.name;
+                  console.log(`✅ Selected row matching criteria "${columnName}=${columnValue}": ${selectedRowName}`);
+                  console.log(`   Row data:`, rowData);
+                  break;
+                }
+              }
+            } catch (parseError) {
+              console.warn(`⚠️ Failed to parse row ${row.name}:`, parseError);
+            }
+          }
+
+          if (!selectedRowName) {
+            console.warn(`⚠️ No row found matching criteria "${columnName}=${columnValue}"`);
+            selectedRowName = tableDataRows[0].name;
+            console.log(`⚠️ Falling back to first row: ${selectedRowName}`);
+          }
+          break;
+
+        default:
+          selectedRowName = tableDataRows[0].name;
+          console.log(`⚠️ Unknown selection mode "${selectionMode}", using first row: ${selectedRowName}`);
+      }
+
+      return selectedRowName;
+    } catch (error) {
+      console.error(`❌ Error in selectTableRow:`, error);
+      return null;
+    }
+  }
+
   private async prepareTaskData(
     taskDetails: TaskDetails,
     orderForm: OrderForm,
@@ -937,6 +1061,85 @@ export class TaskProcessor {
           continue;
         }
         
+        // Check if this is a table definition field
+        if (param.type === 'tableDefinition' && fieldMappings) {
+          const tableHeader = param.header || param.name;
+          const tableFieldConfig = fieldMappings[tableHeader];
+          
+          if (tableFieldConfig && typeof tableFieldConfig === 'object' && tableFieldConfig.fieldType === 'table') {
+            console.log(`📊 Table definition found: ${tableHeader}`);
+            
+            // For retryable-only tasks, skip table processing in update phase
+            // Table selections will be handled ONLY in the retry payload
+            const specificTaskConfig = this.taskConfigs?.tasks?.[taskName];
+            const isRetryableOnly = specificTaskConfig?.isRetryable === true && specificTaskConfig?.isCompletable === false;
+            
+            if (isRetryableOnly) {
+              console.log(`📊 Retryable-only task - skipping table update, will handle in retry payload only`);
+              continue; // Skip table processing for update, will be done in retry payload
+            }
+            
+            // For normal tasks, process table selection in update
+            const selectedRowName = this.selectTableRow(tableFieldConfig, param, taskDetails);
+            
+            if (selectedRowName) {
+              console.log(`✅ Selected row name: ${selectedRowName}`);
+              
+              // IMPORTANT: We only update the select property of EDITABLE tableData rows
+              // FlightDeck manages the table structure itself, we just mark which row is selected
+              for (const dataParam of taskDetails.taskInstParamRequestList) {
+                if (dataParam.type === 'tableData' && dataParam.header === tableHeader && dataParam.id) {
+                  try {
+                    // Parse the row value JSON
+                    const rowData = JSON.parse(dataParam.value || '{}');
+                    
+                    // Set select property based on whether this is the selected row
+                    if (dataParam.name === selectedRowName) {
+                      rowData.select = 'true';
+                      console.log(`✅ Marking row ${dataParam.name} as selected`);
+                    } else {
+                      rowData.select = 'false';
+                    }
+                    
+                    // Add to update payload with updated value (only if it has an ID - means it's editable)
+                    taskInstParamRequestList.push({
+                      ...dataParam,
+                      value: JSON.stringify(rowData)
+                    });
+                  } catch (parseError) {
+                    console.warn(`⚠️ Failed to parse table row ${dataParam.name}:`, parseError);
+                    taskInstParamRequestList.push(dataParam);
+                  }
+                }
+              }
+              
+              // DO NOT add the table definition itself - it's display-only (id: null)
+              console.log(`📊 Table selection complete, not including tableDefinition in update payload`);
+              continue; // Skip normal processing for this tableDefinition field
+            }
+          }
+        }
+        
+        // Skip tableData fields as they're handled above with tableDefinition
+        if (param.type === 'tableData') {
+          // Check if this tableData was already processed as part of a table field
+          const wasProcessed = taskInstParamRequestList.some(p => 
+            p.type === 'tableData' && p.name === param.name && p.header === param.header
+          );
+          if (wasProcessed) {
+            continue; // Already processed as part of table selection
+          } else {
+            // Not part of a configured table
+            // Only include if it has an id (editable)
+            if (param.id) {
+              taskInstParamRequestList.push(param);
+            } else {
+              console.log(`⏭️ Skipping tableData row ${param.name} (no id - display only)`);
+            }
+            continue;
+          }
+        }
+        
         // Try to get field value by field name first, then by label
         let fieldValue = getTaskFieldValue(taskName, param.name, taskConfig, orderForm, taskDetails, taskInstanceNumber);
         
@@ -994,33 +1197,100 @@ export class TaskProcessor {
         .map(p => `${p.name}=${p.value}`)
         .join(', '));
 
-      updatePayload = {
-        id: taskDetails.id,
-        lockCounter: 0,
-        sourceTaskId: taskDetails.sourceTaskId,
-        description: taskDetails.description,
-        sourceSystemName: 'AUTOPILOT',
-        taskName: taskDetails.taskName,
-        escalated: 'N',
-        assignedCuid: taskDetails.assignedCuid || orderForm.userCuid || orderForm.userName || 'AUTOPILOT',
-        assignedUserName: taskDetails.assignedUserName || orderForm.userFullName || orderForm.userName || 'AUTOPILOT',
-        createdById: 'AUTOPILOT',
-        createdByName: 'AUTOPILOT',
-        workgroupList: TaskProcessor.formatWorkgroupList(taskDetails.workgroupList || orderForm.workgroup),
-        statusDetails: taskDetails.statusDetails,
-        taskInstParamRequestList,
-      };
+      // For retryable-only tasks, NEVER send updateTaskData - table selections go ONLY in retry payload
+      const specificTaskConfig = this.taskConfigs?.tasks?.[taskName];
+      const isRetryableOnly = specificTaskConfig?.isRetryable === true && specificTaskConfig?.isCompletable === false;
       
-      console.log(`📋 Update payload for ${taskName}:`, {
-        workgroupList: updatePayload.workgroupList,
-        assignedCuid: updatePayload.assignedCuid,
-        assignedUserName: updatePayload.assignedUserName,
-        userCuid: orderForm.userCuid,
-        userFullName: orderForm.userFullName
-      });
+      if (isRetryableOnly) {
+        console.log(`ℹ️ Retryable-only task - skipping updateTaskData completely, table selection will be in retry payload only`);
+        updatePayload = null;
+      } else {
+        // Check if we only have tableData fields - if so, skip updateTaskData call
+        const onlyTableData = taskInstParamRequestList.every(p => p.type === 'tableData');
+        const hasNonTableChanges = taskInstParamRequestList.some(p => 
+          p.type !== 'tableData' && p.type !== 'tableDefinition'
+        );
+        
+        if (onlyTableData || !hasNonTableChanges) {
+          console.log(`ℹ️ Only table selections configured - will skip updateTaskData and include selection in retry payload`);
+          updatePayload = null; // Don't create update payload for table-only selections
+        } else {
+          updatePayload = {
+            id: taskDetails.id,
+            lockCounter: 0,
+            sourceTaskId: taskDetails.sourceTaskId,
+            description: taskDetails.description,
+            sourceSystemName: 'AUTOPILOT',
+            taskName: taskDetails.taskName,
+            escalated: 'N',
+            assignedCuid: taskDetails.assignedCuid || orderForm.userCuid || orderForm.userName || 'AUTOPILOT',
+            assignedUserName: taskDetails.assignedUserName || orderForm.userFullName || orderForm.userName || 'AUTOPILOT',
+            createdById: 'AUTOPILOT',
+            createdByName: 'AUTOPILOT',
+            workgroupList: TaskProcessor.formatWorkgroupList(taskDetails.workgroupList || orderForm.workgroup),
+            statusDetails: taskDetails.statusDetails,
+            taskInstParamRequestList,
+          };
+          
+          console.log(`📋 Update payload for ${taskName}:`, {
+            workgroupList: updatePayload.workgroupList,
+            assignedCuid: updatePayload.assignedCuid,
+            assignedUserName: updatePayload.assignedUserName,
+          });
+        }
+      }
     }
 
     // Prepare completion payload
+    // First, handle any table row selections
+    const tableSelections: any[] = [];
+    for (const param of taskDetails.taskInstParamRequestList) {
+      if (param.type === 'tableDefinition' && fieldMappings) {
+        const tableHeader = param.header || param.name;
+        const tableFieldConfig = fieldMappings[tableHeader];
+        
+        if (tableFieldConfig && typeof tableFieldConfig === 'object' && tableFieldConfig.fieldType === 'table') {
+          const selectedRowName = this.selectTableRow(tableFieldConfig, param, taskDetails);
+          
+          if (selectedRowName) {
+            console.log(`📊 Adding table row selection to retry payload: ${tableHeader} -> ${selectedRowName}`);
+            
+            // FlightDeck requires ALL table rows to be sent with proper selection state
+            // Loop through all tableData rows for this table
+            for (const dataParam of taskDetails.taskInstParamRequestList) {
+              if (dataParam.type === 'tableData' && dataParam.header === tableHeader && dataParam.id) {
+                try {
+                  const rowData = JSON.parse(dataParam.value || '{}');
+                  
+                  // Set both 'select' and 'Selected' properties based on whether this is the selected row
+                  const isSelected = dataParam.name === selectedRowName;
+                  rowData.select = isSelected ? 'true' : 'false';
+                  rowData.Selected = isSelected;
+                  
+                  tableSelections.push({
+                    type: dataParam.type,
+                    header: dataParam.header,
+                    name: dataParam.name,
+                    value: JSON.stringify(rowData),
+                    editable: true,
+                    jsonDescriptorObject: dataParam.jsonDescriptorObject,
+                  });
+                  
+                  if (isSelected) {
+                    console.log(`✅ Table row ${selectedRowName} marked as selected (select="true", Selected=true)`);
+                  }
+                } catch (parseError) {
+                  console.warn(`⚠️ Failed to parse table row ${dataParam.name}:`, parseError);
+                }
+              }
+            }
+            
+            console.log(`📊 Added ${tableSelections.length} table rows to retry payload`);
+          }
+        }
+      }
+    }
+    
     completePayload.paramRequests = [
       {
         type: 'textArea',
@@ -1045,6 +1315,7 @@ export class TaskProcessor {
           sort: true,
         },
       },
+      ...tableSelections, // Add table selections to retry payload
     ];
 
     // Add any required field values to completion payload

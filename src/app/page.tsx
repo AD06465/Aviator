@@ -258,7 +258,7 @@ export default function HomePage() {
           <h1 className="text-4xl font-bold text-gray-900 mb-4">
             Welcome to{' '}
             <span className="bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-              AVIATOR
+              Smart Order Closure
             </span>
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">

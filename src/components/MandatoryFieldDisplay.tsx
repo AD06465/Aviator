@@ -55,7 +55,7 @@ export const MandatoryFieldDisplay: React.FC<MandatoryFieldDisplayProps> = ({ ta
           <div className="ml-3">
             <h4 className="text-sm font-medium text-blue-800">Enhanced Field Support</h4>
             <div className="mt-1 text-sm text-blue-700">
-              AVIATOR now shows ALL editable fields for tasks, including Network Build Form fields 
+              Smart Order Closure now shows ALL editable fields for tasks, including Network Build Form fields 
               like Rack Size, Device Mount Type, Device CLLI ARM, and Engineering Solution fields 
               like Build Types, CCEA, and Implementation Team.
             </div>

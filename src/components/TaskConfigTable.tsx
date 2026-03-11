@@ -27,9 +27,14 @@ const DEFAULT_PRODUCT_NAMES: string[] = ['DIA', 'ELINE', 'ELAN', 'ELYNK', 'IPVPN
 export interface TaskFieldMapping {
   fieldName: string;
   fieldValue: string;
-  fieldType?: 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox';
+  fieldType?: 'text' | 'dropdown' | 'date' | 'radio' | 'checkbox' | 'table';
   dropdownValue?: string;
   optionsList?: string[]; // For radio buttons
+  // Table-specific properties
+  tableRowSelection?: 'first' | 'last' | 'index' | 'criteria'; // How to select row
+  tableRowIndex?: number; // Specific row index (0-based)
+  tableColumnName?: string; // Column name for criteria-based selection
+  tableColumnValue?: string; // Value to match in column for criteria-based selection
 }
 
 export interface ConditionalRule {
@@ -63,21 +68,31 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   });
   const [newFieldName, setNewFieldName] = useState('');
   const [newFieldValue, setNewFieldValue] = useState('');
-  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
+  const [newFieldType, setNewFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox' | 'table'>('text');
   const [newDropdownValue, setNewDropdownValue] = useState('');
   const [newFieldRadioOptions, setNewFieldRadioOptions] = useState<string[]>([]);
   const [newFieldRadioOptionInput, setNewFieldRadioOptionInput] = useState('');
+  // Table field states
+  const [newTableRowSelection, setNewTableRowSelection] = useState<'first' | 'last' | 'index' | 'criteria'>('first');
+  const [newTableRowIndex, setNewTableRowIndex] = useState<number>(0);
+  const [newTableColumnName, setNewTableColumnName] = useState('');
+  const [newTableColumnValue, setNewTableColumnValue] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   
-  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
+  const [editFieldType, setEditFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox' | 'table'>('text');
   const [editFieldName, setEditFieldName] = useState('');
   const [editFieldValue, setEditFieldValue] = useState('');
   const [editDropdownValue, setEditDropdownValue] = useState('');
   const [editingFieldIndex, setEditingFieldIndex] = useState<number | null>(null);
   const [editRadioOptions, setEditRadioOptions] = useState<string[]>([]);
   const [editRadioOptionInput, setEditRadioOptionInput] = useState('');
+  // Table field states for editing
+  const [editTableRowSelection, setEditTableRowSelection] = useState<'first' | 'last' | 'index' | 'criteria'>('first');
+  const [editTableRowIndex, setEditTableRowIndex] = useState<number>(0);
+  const [editTableColumnName, setEditTableColumnName] = useState('');
+  const [editTableColumnValue, setEditTableColumnValue] = useState('');
 
   const [showConditionalRules, setShowConditionalRules] = useState<number | null>(null);
   const [newRuleConditionType, setNewRuleConditionType] = useState<'workflow' | 'orderType' | 'itentialWorkflow' | 'productName' | 'custom'>('workflow');
@@ -85,10 +100,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   const [newRuleFields, setNewRuleFields] = useState<TaskFieldMapping[]>([]);
   const [newRuleFieldName, setNewRuleFieldName] = useState('');
   const [newRuleFieldValue, setNewRuleFieldValue] = useState('');
-  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox'>('text');
+  const [newRuleFieldType, setNewRuleFieldType] = useState<'text' | 'dropdown' | 'date' | 'radio' | 'checkbox' | 'table'>('text');
   const [newRuleDropdownValue, setNewRuleDropdownValue] = useState('');
   const [newRuleRadioOptions, setNewRuleRadioOptions] = useState<string[]>([]);
   const [newRuleRadioOptionInput, setNewRuleRadioOptionInput] = useState('');
+  // Table field states for rules
+  const [newRuleTableRowSelection, setNewRuleTableRowSelection] = useState<'first' | 'last' | 'index' | 'criteria'>('first');
+  const [newRuleTableRowIndex, setNewRuleTableRowIndex] = useState<number>(0);
+  const [newRuleTableColumnName, setNewRuleTableColumnName] = useState('');
+  const [newRuleTableColumnValue, setNewRuleTableColumnValue] = useState('');
 
   // Custom attribute management
   const [itentialWorkflows, setItentialWorkflows] = useState<string[]>(DEFAULT_ITENTIAL_WORKFLOWS);
@@ -161,13 +181,44 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
               isRetryable: config.retryableTasks?.includes(taskName) || false,
               fields: Object.entries(config.taskFieldMappings?.[taskName] || {}).map(
                 ([fieldName, fieldValue]: [string, any]) => {
-                  if (typeof fieldValue === 'object' && fieldValue.fieldType === 'dropdown') {
-                    return {
-                      fieldName,
-                      fieldValue: fieldValue.fieldValue,
-                      fieldType: 'dropdown' as const,
-                      dropdownValue: fieldValue.dropdownValue
-                    };
+                  if (typeof fieldValue === 'object') {
+                    if (fieldValue.fieldType === 'dropdown') {
+                      return {
+                        fieldName,
+                        fieldValue: fieldValue.fieldValue,
+                        fieldType: 'dropdown' as const,
+                        dropdownValue: fieldValue.dropdownValue
+                      };
+                    } else if (fieldValue.fieldType === 'table') {
+                      return {
+                        fieldName,
+                        fieldValue: '',
+                        fieldType: 'table' as const,
+                        tableRowSelection: fieldValue.tableRowSelection || 'first',
+                        tableRowIndex: fieldValue.tableRowIndex,
+                        tableColumnName: fieldValue.tableColumnName,
+                        tableColumnValue: fieldValue.tableColumnValue
+                      };
+                    } else if (fieldValue.fieldType === 'radio') {
+                      return {
+                        fieldName,
+                        fieldValue: fieldValue.fieldValue,
+                        fieldType: 'radio' as const,
+                        optionsList: fieldValue.optionsList
+                      };
+                    } else if (fieldValue.fieldType === 'checkbox') {
+                      return {
+                        fieldName,
+                        fieldValue: fieldValue.fieldValue,
+                        fieldType: 'checkbox' as const
+                      };
+                    } else if (fieldValue.fieldType === 'date') {
+                      return {
+                        fieldName,
+                        fieldValue: fieldValue.fieldValue,
+                        fieldType: 'date' as const
+                      };
+                    }
                   }
                   return {
                     fieldName,
@@ -192,13 +243,44 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                 isRetryable: true,
                 fields: Object.entries(config.taskFieldMappings?.[taskName] || {}).map(
                   ([fieldName, fieldValue]: [string, any]) => {
-                    if (typeof fieldValue === 'object' && fieldValue.fieldType === 'dropdown') {
-                      return {
-                        fieldName,
-                        fieldValue: fieldValue.fieldValue,
-                        fieldType: 'dropdown' as const,
-                        dropdownValue: fieldValue.dropdownValue
-                      };
+                    if (typeof fieldValue === 'object') {
+                      if (fieldValue.fieldType === 'dropdown') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'dropdown' as const,
+                          dropdownValue: fieldValue.dropdownValue
+                        };
+                      } else if (fieldValue.fieldType === 'table') {
+                        return {
+                          fieldName,
+                          fieldValue: '',
+                          fieldType: 'table' as const,
+                          tableRowSelection: fieldValue.tableRowSelection || 'first',
+                          tableRowIndex: fieldValue.tableRowIndex,
+                          tableColumnName: fieldValue.tableColumnName,
+                          tableColumnValue: fieldValue.tableColumnValue
+                        };
+                      } else if (fieldValue.fieldType === 'radio') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'radio' as const,
+                          optionsList: fieldValue.optionsList
+                        };
+                      } else if (fieldValue.fieldType === 'checkbox') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'checkbox' as const
+                        };
+                      } else if (fieldValue.fieldType === 'date') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'date' as const
+                        };
+                      }
                     }
                     return {
                       fieldName,
@@ -224,13 +306,44 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                 isRetryable: false,
                 fields: Object.entries(config.taskFieldMappings?.[taskName] || {}).map(
                   ([fieldName, fieldValue]: [string, any]) => {
-                    if (typeof fieldValue === 'object' && fieldValue.fieldType === 'dropdown') {
-                      return {
-                        fieldName,
-                        fieldValue: fieldValue.fieldValue,
-                        fieldType: 'dropdown' as const,
-                        dropdownValue: fieldValue.dropdownValue
-                      };
+                    if (typeof fieldValue === 'object') {
+                      if (fieldValue.fieldType === 'dropdown') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'dropdown' as const,
+                          dropdownValue: fieldValue.dropdownValue
+                        };
+                      } else if (fieldValue.fieldType === 'table') {
+                        return {
+                          fieldName,
+                          fieldValue: '',
+                          fieldType: 'table' as const,
+                          tableRowSelection: fieldValue.tableRowSelection || 'first',
+                          tableRowIndex: fieldValue.tableRowIndex,
+                          tableColumnName: fieldValue.tableColumnName,
+                          tableColumnValue: fieldValue.tableColumnValue
+                        };
+                      } else if (fieldValue.fieldType === 'radio') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'radio' as const,
+                          optionsList: fieldValue.optionsList
+                        };
+                      } else if (fieldValue.fieldType === 'checkbox') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'checkbox' as const
+                        };
+                      } else if (fieldValue.fieldType === 'date') {
+                        return {
+                          fieldName,
+                          fieldValue: fieldValue.fieldValue,
+                          fieldType: 'date' as const
+                        };
+                      }
                     }
                     return {
                       fieldName,
@@ -288,11 +401,36 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
         taskFieldMappings: tasks.reduce((acc, task) => {
           if (task.fields.length > 0) {
             acc[task.taskName] = task.fields.reduce((fieldAcc, field) => {
+              // Save all field types with their complete properties
               if (field.fieldType === 'dropdown') {
                 fieldAcc[field.fieldName] = {
                   fieldValue: field.fieldValue,
                   fieldType: field.fieldType,
                   dropdownValue: field.dropdownValue || field.fieldValue
+                };
+              } else if (field.fieldType === 'table') {
+                fieldAcc[field.fieldName] = {
+                  fieldType: field.fieldType,
+                  tableRowSelection: field.tableRowSelection,
+                  tableRowIndex: field.tableRowIndex,
+                  tableColumnName: field.tableColumnName,
+                  tableColumnValue: field.tableColumnValue
+                };
+              } else if (field.fieldType === 'radio') {
+                fieldAcc[field.fieldName] = {
+                  fieldType: field.fieldType,
+                  fieldValue: field.fieldValue,
+                  optionsList: field.optionsList
+                };
+              } else if (field.fieldType === 'checkbox') {
+                fieldAcc[field.fieldName] = {
+                  fieldType: field.fieldType,
+                  fieldValue: field.fieldValue
+                };
+              } else if (field.fieldType === 'date') {
+                fieldAcc[field.fieldName] = {
+                  fieldType: field.fieldType,
+                  fieldValue: field.fieldValue
                 };
               } else {
                 fieldAcc[field.fieldName] = field.fieldValue;
@@ -431,8 +569,14 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
   };
 
   const handleAddField = (taskIndex: number) => {
-    if (!newFieldName.trim() || !newFieldValue.trim()) {
-      alert('Please enter both field name and value');
+    if (!newFieldName.trim()) {
+      alert('Please enter field name');
+      return;
+    }
+
+    // Table fields don't need a value
+    if (newFieldType !== 'table' && !newFieldValue.trim()) {
+      alert('Please enter field value');
       return;
     }
 
@@ -440,6 +584,20 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     if (newFieldType === 'radio' && newFieldRadioOptions.length === 0) {
       alert('Please add at least one option for the radio button');
       return;
+    }
+
+    // Validate table field configuration
+    if (newFieldType === 'table') {
+      if (newTableRowSelection === 'criteria') {
+        if (!newTableColumnName.trim()) {
+          alert('Please enter column name for criteria-based selection');
+          return;
+        }
+        if (!newTableColumnValue.trim()) {
+          alert('Please enter column value for criteria-based selection');
+          return;
+        }
+      }
     }
 
     const updatedTask = { ...tasks[taskIndex] };
@@ -450,7 +608,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
 
     const newField: TaskFieldMapping = {
       fieldName: newFieldName,
-      fieldValue: newFieldValue,
+      fieldValue: newFieldValue || '',
       fieldType: newFieldType,
     };
     
@@ -462,6 +620,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
       newField.optionsList = newFieldRadioOptions;
     }
 
+    if (newFieldType === 'table') {
+      newField.tableRowSelection = newTableRowSelection;
+      if (newTableRowSelection === 'index') {
+        newField.tableRowIndex = newTableRowIndex;
+      }
+      if (newTableRowSelection === 'criteria') {
+        newField.tableColumnName = newTableColumnName;
+        newField.tableColumnValue = newTableColumnValue;
+      }
+    }
+
     updatedTask.fields.push(newField);
     handleUpdateTask(taskIndex, updatedTask);
     setNewFieldName('');
@@ -470,6 +639,10 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     setNewFieldType('text');
     setNewFieldRadioOptions([]);
     setNewFieldRadioOptionInput('');
+    setNewTableRowSelection('first');
+    setNewTableRowIndex(0);
+    setNewTableColumnName('');
+    setNewTableColumnValue('');
   };
 
   const handleEditField = (taskIndex: number, fieldIndex: number) => {
@@ -480,12 +653,22 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     setEditDropdownValue(field.dropdownValue || '');
     setEditRadioOptions(field.optionsList || []);
     setEditRadioOptionInput('');
+    setEditTableRowSelection(field.tableRowSelection || 'first');
+    setEditTableRowIndex(field.tableRowIndex || 0);
+    setEditTableColumnName(field.tableColumnName || '');
+    setEditTableColumnValue(field.tableColumnValue || '');
     setEditingFieldIndex(fieldIndex);
   };
 
   const handleUpdateField = (taskIndex: number, fieldIndex: number) => {
-    if (!editFieldName.trim() || !editFieldValue.trim()) {
-      alert('Please enter both field name and value');
+    if (!editFieldName.trim()) {
+      alert('Please enter field name');
+      return;
+    }
+
+    // Table fields don't need a value
+    if (editFieldType !== 'table' && !editFieldValue.trim()) {
+      alert('Please enter field value');
       return;
     }
 
@@ -493,6 +676,20 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
     if (editFieldType === 'radio' && (!editRadioOptions || editRadioOptions.length === 0)) {
       alert('Radio buttons must have at least one option');
       return;
+    }
+
+    // Validate table field configuration
+    if (editFieldType === 'table') {
+      if (editTableRowSelection === 'criteria') {
+        if (!editTableColumnName.trim()) {
+          alert('Please enter column name for criteria-based selection');
+          return;
+        }
+        if (!editTableColumnValue.trim()) {
+          alert('Please enter column value for criteria-based selection');
+          return;
+        }
+      }
     }
 
     const updatedTask = { ...tasks[taskIndex] };
@@ -504,7 +701,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
 
     const updatedField: TaskFieldMapping = {
       fieldName: editFieldName,
-      fieldValue: editFieldValue,
+      fieldValue: editFieldValue || '',
       fieldType: editFieldType,
     };
     
@@ -514,6 +711,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
 
     if (editFieldType === 'radio' && editRadioOptions) {
       updatedField.optionsList = editRadioOptions;
+    }
+
+    if (editFieldType === 'table') {
+      updatedField.tableRowSelection = editTableRowSelection;
+      if (editTableRowSelection === 'index') {
+        updatedField.tableRowIndex = editTableRowIndex;
+      }
+      if (editTableRowSelection === 'criteria') {
+        updatedField.tableColumnName = editTableColumnName;
+        updatedField.tableColumnValue = editTableColumnValue;
+      }
     }
 
     updatedTask.fields[fieldIndex] = updatedField;
@@ -1169,6 +1377,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                                   <option value="date">📅 Date</option>
                                                   <option value="radio">🔘 Radio</option>
                                                   <option value="checkbox">☑️ Checkbox</option>
+                                                  <option value="table">📊 Table Row</option>
                                                 </select>
                                                 <input
                                                   type="text"
@@ -1330,6 +1539,17 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                               {field.fieldType === 'checkbox' && (
                                                 <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full font-medium hover:bg-green-200 transition-colors duration-200">☑️ Checkbox</span>
                                               )}
+                                              {field.fieldType === 'table' && (
+                                                <>
+                                                  <span className="text-xs bg-teal-100 text-teal-800 px-2 py-1 rounded-full font-medium hover:bg-teal-200 transition-colors duration-200">📊 Table</span>
+                                                  <span className="text-xs text-gray-500">
+                                                    ({field.tableRowSelection === 'first' ? 'First Row' : 
+                                                      field.tableRowSelection === 'last' ? 'Last Row' : 
+                                                      field.tableRowSelection === 'index' ? `Row ${field.tableRowIndex}` : 
+                                                      'By Criteria'})
+                                                  </span>
+                                                </>
+                                              )}
                                               <div className="ml-auto flex gap-1">
                                                 <button
                                                   onClick={() => handleEditField(actualIndex, fieldIndex)}
@@ -1386,6 +1606,15 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                           <p className="mb-1">• <b>Field Name:</b> FlightDeck field (e.g., "Redesign Required?")</p>
                                           <p className="mb-3">• <b>Value:</b> "true" or "false"</p>
                                           
+                                          <p className="font-semibold mb-2">📊 Table Row Selection:</p>
+                                          <p className="mb-1">• <b>Field Name:</b> FlightDeck table field (e.g., "Select Address Location")</p>
+                                          <p className="mb-1">• <b>Selection Mode:</b> Choose how to select row:</p>
+                                          <p className="ml-4 mb-1">- <b>First Row:</b> Always select the first available row</p>
+                                          <p className="ml-4 mb-1">- <b>Last Row:</b> Select the last row in table</p>
+                                          <p className="ml-4 mb-1">- <b>By Index:</b> Select specific row number (0 = first, 1 = second...)</p>
+                                          <p className="ml-4 mb-3">- <b>By Criteria:</b> Select row matching column value</p>
+                                          <p className="mb-3 text-yellow-300">⚠️ No field value needed - table selection is automatic</p>
+                                          
                                           <div className="border-t border-gray-700 pt-2 mt-2">
                                             <p className="font-semibold mb-2 text-yellow-300">✨ Custom/Unique Value Patterns (Optional):</p>
                                             <p className="mb-1 text-gray-300">💡 <b className="text-white">Default:</b> Just enter field value (e.g., "Completed", "My Value")</p>
@@ -1441,6 +1670,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                         <option value="date">📅 Date</option>
                                         <option value="radio">🔘 Radio</option>
                                         <option value="checkbox">☑️ Checkbox</option>
+                                        <option value="table">📊 Table Row</option>
                                       </select>
                                       <input
                                         type="text"
@@ -1562,6 +1792,68 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                             <option key={idx} value={option}>{option}</option>
                                           ))}
                                         </select>
+                                      </div>
+                                    ) : newFieldType === 'table' ? (
+                                      <div className="space-y-2 mb-2">
+                                        <div className="bg-green-50 p-3 rounded border border-green-200">
+                                          <p className="text-xs font-medium text-green-900 mb-2">📊 Table Row Selection Configuration</p>
+                                          <select
+                                            value={newTableRowSelection}
+                                            onChange={(e) => setNewTableRowSelection(e.target.value as 'first' | 'last' | 'index' | 'criteria')}
+                                            className="w-full px-3 py-1 border rounded text-sm mb-2"
+                                          >
+                                            <option value="first">Select First Row</option>
+                                            <option value="last">Select Last Row</option>
+                                            <option value="index">Select Row by Index</option>
+                                            <option value="criteria">Select Row by Criteria</option>
+                                          </select>
+                                          
+                                          {newTableRowSelection === 'index' && (
+                                            <div className="mt-2">
+                                              <label className="block text-xs text-gray-700 mb-1">Row Index (0-based):</label>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={newTableRowIndex}
+                                                onChange={(e) => setNewTableRowIndex(parseInt(e.target.value) || 0)}
+                                                className="w-full px-3 py-1 border rounded text-sm"
+                                                placeholder="0"
+                                              />
+                                            </div>
+                                          )}
+                                          
+                                          {newTableRowSelection === 'criteria' && (
+                                            <div className="mt-2 space-y-2">
+                                              <div>
+                                                <label className="block text-xs text-gray-700 mb-1">Column Name:</label>
+                                                <input
+                                                  type="text"
+                                                  value={newTableColumnName}
+                                                  onChange={(e) => setNewTableColumnName(e.target.value)}
+                                                  className="w-full px-3 py-1 border rounded text-sm"
+                                                  placeholder="e.g., Status, Type"
+                                                />
+                                              </div>
+                                              <div>
+                                                <label className="block text-xs text-gray-700 mb-1">Column Value to Match:</label>
+                                                <input
+                                                  type="text"
+                                                  value={newTableColumnValue}
+                                                  onChange={(e) => setNewTableColumnValue(e.target.value)}
+                                                  className="w-full px-3 py-1 border rounded text-sm"
+                                                  placeholder="e.g., Available, Active"
+                                                />
+                                              </div>
+                                            </div>
+                                          )}
+                                          
+                                          <div className="mt-2 bg-blue-50 p-2 rounded">
+                                            <p className="text-xs text-blue-800">
+                                              ℹ️ <b>Table field automatically selects a row from FlightDeck tables.</b>
+                                              No field value needed - just configure how to select the row.
+                                            </p>
+                                          </div>
+                                        </div>
                                       </div>
                                     ) : null}
                                     <button
@@ -1787,6 +2079,7 @@ const TaskConfigTable: React.FC<TaskConfigTableProps> = ({ onConfigChange }) => 
                                             <option value="date">📅 Date</option>
                                             <option value="radio">🔘 Radio</option>
                                             <option value="checkbox">☑️ Checkbox</option>
+                                            <option value="table">📊 Table Row</option>
                                           </select>
                                           <input
                                             type="text"

@@ -141,7 +141,7 @@ const TaskMonitor: React.FC<TaskMonitorProps> = ({
       setAviatorCompletedCount(aviatorCount);
       setIsCheckingAviatorTasks(false);
       
-      console.log(`📊 AVIATOR completed ${aviatorCount} out of ${completedTasks.length} completed tasks`);
+      console.log(`📊 Smart Order Closure completed ${aviatorCount} out of ${completedTasks.length} completed tasks`);
     };
 
     if (tasks.length > 0) {

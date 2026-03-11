@@ -4,7 +4,7 @@ import './globals.css'
 import { AppProviders } from '@/core/providers/AppProviders'
 
 export const metadata: Metadata = {
-  title: 'AVIATOR - FlightDeck Automation',
+  title: 'Smart Order Closure - FlightDeck Automation',
   description: 'Enterprise-grade FlightDeck task automation system',
 }
 

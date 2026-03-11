@@ -12,7 +12,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              {/* AVIATOR Logo */}
+              {/* Smart Order Closure Logo */}
               <div className="flex items-center space-x-3">
                 <div className="relative">
                   <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-blue-800 rounded-lg flex items-center justify-center">
@@ -34,7 +34,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </div>
                 <div>
                   <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-blue-800 bg-clip-text text-transparent">
-                    AVIATOR
+                    Smart Order Closure
                   </h1>
                   <p className="text-xs text-gray-500 -mt-1">FlightDeck Automation</p>
                 </div>
@@ -65,7 +65,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">
-              © 2025 AVIATOR - FlightDeck Task Automation System
+              © 2025 Smart Order Closure - FlightDeck Task Automation System
             </p>
             <div className="flex items-center space-x-4 text-sm text-gray-500">
               <span>Version 1.0.0</span>

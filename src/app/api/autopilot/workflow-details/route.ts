@@ -14,8 +14,8 @@ const AUTOPILOT_PASSWORD = process.env.AUTOPILOT_PASSWORD;
 function getAutopilotBaseUrl(environment: string): string {
   const urlMap: Record<string, string> = {
     'Test 1': 'https://usddclvapapp011-test.corp.intranet:3443',
-    'Test 2': 'https://usddclvapapp041-test2.corp.intranet:3443',
-    'Test 4': 'https://orddclvapapp021-test4.corp.intranet:3443',
+    'Test 2': 'https://usddclvapapp021-test.corp.intranet:3443',
+    'Test 4': 'https://usddclvapapp041-test.corp.intranet:3443',
   };
   return urlMap[environment] || urlMap['Test 1'];
 }
