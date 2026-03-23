@@ -298,3 +298,167 @@ export interface UserFieldInput {
   fieldName: string;
   value: string;
 }
+
+// Swift Monitor Types
+export interface SwiftTaskAttribute {
+  originalName: string;
+  name: string;
+  value: string;
+  sequence: number;
+}
+
+export interface SwiftTask {
+  taskKey: string;
+  taskId: number;
+  taskTypeId: number;
+  workflowId: string;
+  milestoneId: number;
+  milestoneName: string;
+  createdByTaskTemplateId: number;
+  createdByUser: string | null;
+  createdByUserId: string | null;
+  creatorGlobalRegion: string | null;
+  originalName: string;
+  name: string;
+  description: string;
+  status: string; // "Ready", "Completed", "In Progress", etc.
+  durationType: string;
+  priority: string;
+  category: string;
+  displayName: string;
+  startDate: string | null;
+  startDateUtc: string | null;
+  completionDate: string | null;
+  completionDateUtc: string | null;
+  dueDate: string | null;
+  dueDateUtc: string | null;
+  assignedTo: string | null;
+  assignedToUserId: string | null;
+  roleName: string;
+  attributes: SwiftTaskAttribute[];
+  uniqueIdentifer: string;
+  isAvailable: boolean;
+}
+
+export interface SwiftProductAttribute {
+  productInstanceId: number;
+  transactionId: number;
+  action: string;
+  attributeName: string;
+  attributeDisplayValue: string | null;
+  attributeValue: string | null;
+  attributeId: number | null;
+  attributeNumericEquivalent: number;
+}
+
+export interface SwiftProduct {
+  productInstanceId: number;
+  transactionId: number;
+  productPackageId: number;
+  productName: string;
+  pCatProductId: number;
+  pCatVersion: string;
+  isParentProduct: boolean;
+  accountNumber: number;
+  action: string;
+  productAttributes: SwiftProductAttribute[];
+}
+
+export interface SwiftProductPackage {
+  productPackageId: number;
+  transactionId: number;
+  businessOrderId: number;
+  customerId: number;
+  turnUpProcessor: string;
+  status: string; // "Ordered", "In Progress", etc.
+  action: string;
+  negotiatedDueDate: string;
+  committedDueDate: string;
+  isDueDateCommitted: boolean;
+  isOrdered: boolean;
+  transactionType: string;
+  products: SwiftProduct[];
+  orderingSystem: string;
+}
+
+export interface SwiftEnvironment {
+  name: string;
+  taskApiUrl: string;
+  orderApiUrl: string;
+}
+
+export interface SwiftOrderDetail {
+  TransactionId: number;
+  OrderType: string | null;
+  SelectedCoordinator: string | null;
+  SelectedOES: string | null;
+  Status: string;
+  CustomerNumber: string;
+  CustomerId: number;
+  BusinessOrderId: number;
+  ModifiedBy: string;
+  ModifiedDate: string;
+  CreatedBy: string;
+  CreatedDate: string;
+  // ... other fields as needed
+  [key: string]: any; // Allow for additional fields
+}
+
+export interface SwiftOrderPackageResponse {
+  OrderDetail: SwiftOrderDetail;
+  IRRule?: any;
+  TaskPartialViewModel?: any;
+  ProductPackages?: any;
+  ProductPackageSummaries?: any[];
+  // ... other fields as needed
+  [key: string]: any;
+}
+
+export interface OrderValidationResult {
+  isValid: boolean;
+  missingFields: string[];
+  errors: string[];
+}
+
+// Available Contacts Types
+export interface ContactTimestamp {
+  CreateOn: string;
+  CreatedByFirstName: string;
+  CreatedByLastName: string;
+  ModifiedOn: string;
+  ModifiedByFirstName: string;
+  ModifiedByLastName: string;
+}
+
+export interface ContactMethod {
+  MethodId: number;
+  ContactId: number;
+  MethodType: string; // "E164_PHONE", "EMAIL"
+  MethodName: string; // "PHONE", "EMAIL"
+  Value: string;
+  FormattedValue: string;
+  OtherMethodName: string | null;
+  Timestamp: ContactTimestamp;
+  ActivityType: number;
+  Extension: string | null;
+  NotificationPreference: string | null;
+  MethodDisplay: string;
+  IsPrimaryPhoneNumber: boolean;
+  IsPrimaryEMailAddress: boolean;
+  IsOtherPhoneNumber: boolean;
+}
+
+export interface AvailableContact {
+  NameFirstLast: string;
+  ContactId: number;
+  PrimaryType: string; // "Customer"
+  Company: string;
+  ContactMethods: ContactMethod[];
+  ContactType: string; // "PERSON"
+}
+
+export interface AvailableContactsResult {
+  contacts: AvailableContact[];
+  firstContactId: number | null;
+  customerNumber?: string;
+}

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GCA API Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold mb-6 text-gray-800">GCA API Test - Order 556169321</h1>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Order ID (Request ID)</label>
+                <input 
+                    type="text" 
+                    id="orderId" 
+                    value="556169321"
+                    placeholder="Enter Order ID"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Environment</label>
+                <select 
+                    id="environment"
+                    class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                    <option value="Test 1">Test 1 (billingenv1)</option>
+                    <option value="Test 2">Test 2 (billingenv2)</option>
+                    <option value="Test 4">Test 4 (billingenv4)</option>
+                </select>
+            </div>
+
+            <button 
+                onclick="testGCASearchAPI()"
+                class="w-full bg-blue-600 text-white px-6 py-3 rounded-md hover:bg-blue-700 font-medium mb-3"
+            >
+                1. Test GCA Search API
+            </button>
+
+            <button 
+                onclick="testBothAPIs()"
+                class="w-full bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium mb-3"
+            >
+                2. Test Full Flow (Search + Order Details)
+            </button>
+
+            <button 
+                onclick="testCompleteFlow()"
+                class="w-full bg-purple-600 text-white px-6 py-3 rounded-md hover:bg-purple-700 font-medium"
+            >
+                3. Test Complete Flow (Search + Details + Approve Credit) ⭐
+            </button>
+
+            <div id="loading" class="hidden mt-4 text-center">
+                <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p class="mt-2 text-gray-600">Calling GCA API...</p>
+            </div>
+
+            <div id="result" class="mt-6 hidden">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Response:</h2>
+                <div id="resultContent" class="bg-gray-50 p-4 rounded-md overflow-auto max-h-96"></div>
+            </div>
+
+            <div id="extractedData" class="mt-6 hidden">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">Extracted Order Data:</h2>
+                <div id="extractedContent" class="bg-green-50 p-4 rounded-md"></div>
+            </div>
+
+            <div id="orderDetails" class="mt-6 hidden">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">📋 Order Details Response:</h2>
+                <div id="orderDetailsContent" class="bg-blue-50 p-4 rounded-md"></div>
+            </div>
+
+            <div id="approveResult" class="mt-6 hidden">
+                <h2 class="text-xl font-bold mb-4 text-gray-800">✅ Credit Approval Response:</h2>
+                <div id="approveResultContent" class="bg-purple-50 p-4 rounded-md"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Button handlers
+        async function testGCASearchAPI() {
+            await testSearchAPI(false);
+        }
+
+        async function testBothAPIs() {
+            const gcaOrderId = await testSearchAPI(true);
+            if (gcaOrderId) {
+                await testOrderDetailsAPI(gcaOrderId, false);
+            }
+        }
+
+        async function testCompleteFlow() {
+            console.log('=== Starting Complete Flow ===');
+            const gcaOrderId = await testSearchAPI(true);
+            console.log('Got GCA Order ID:', gcaOrderId);
+            
+            if (!gcaOrderId) {
+                alert('Failed to get GCA Order ID');
+                return;
+            }
+            
+            const orderDetails = await testOrderDetailsAPI(gcaOrderId, true);
+            console.log('Got order details:', orderDetails);
+            
+            if (!orderDetails) {
+                alert('Failed to get order details');
+                return;
+            }
+            
+            await testApproveCreditAPI(orderDetails);
+        }
+
+        // API Test Functions
+        async function testSearchAPI(silent) {
+            const orderId = document.getElementById('orderId').value;
+            const environment = document.getElementById('environment').value;
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const resultContent = document.getElementById('resultContent');
+            const extractedData = document.getElementById('extractedData');
+            const extractedContent = document.getElementById('extractedContent');
+            const orderDetails = document.getElementById('orderDetails');
+
+            if (!orderId) {
+                alert('Please enter an Order ID');
+                return null;
+            }
+
+            if (!silent) {
+                loading.classList.remove('hidden');
+                result.classList.add('hidden');
+                extractedData.classList.add('hidden');
+                orderDetails.classList.add('hidden');
+            }
+
+            try {
+                const response = await fetch('/api/gca/search-order/' + orderId + '?env=' + encodeURIComponent(environment));
+                const data = await response.json();
+
+                if (!silent) {
+                    loading.classList.add('hidden');
+                    result.classList.remove('hidden');
+                }
+
+                if (data.success) {
+                    const gcaOrderId = data.extractedData?.gcaOrderId;
+                    
+                    if (!silent) {
+                        resultContent.innerHTML = '<div class="mb-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">✓ Success</span></div><div><strong>GCA Order ID:</strong> ' + (gcaOrderId || 'Not found') + '</div>';
+                        
+                        if (data.extractedData) {
+                            extractedData.classList.remove('hidden');
+                            const ext = data.extractedData;
+                            extractedContent.innerHTML = '<div class="grid grid-cols-2 gap-3"><div><p class="text-sm text-gray-600">Request ID</p><p class="font-semibold">' + ext.requestId + '</p></div><div><p class="text-sm text-gray-600">GCA Order ID</p><p class="font-semibold text-blue-600">' + ext.gcaOrderId + '</p></div><div><p class="text-sm text-gray-600">Credit State</p><p class="font-semibold">' + ext.orderCreditState + '</p></div><div><p class="text-sm text-gray-600">Credit Result</p><p class="font-semibold">' + ext.orderCreditResult + '</p></div></div>';
+                        }
+                    }
+                    
+                    return gcaOrderId;
+                } else {
+                    if (!silent) {
+                        resultContent.innerHTML = '<div class="text-red-600">Error: ' + data.error + '</div>';
+                    }
+                    return null;
+                }
+            } catch (error) {
+                if (!silent) {
+                    loading.classList.add('hidden');
+                    result.classList.remove('hidden');
+                    resultContent.innerHTML = '<div class="text-red-600">Error: ' + error.message + '</div>';
+                }
+                return null;
+            }
+        }
+
+        async function testOrderDetailsAPI(gcaOrderId, silent) {
+            const orderId = document.getElementById('orderId').value;
+            const environment = document.getElementById('environment').value;
+            const loading = document.getElementById('loading');
+            const orderDetails = document.getElementById('orderDetails');
+            const orderDetailsContent = document.getElementById('orderDetailsContent');
+
+            if (!silent) {
+                loading.innerHTML = '<div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div><p class="mt-2 text-gray-600">Getting Order Details...</p>';
+                loading.classList.remove('hidden');
+                orderDetails.classList.add('hidden');
+            }
+
+            try {
+                const response = await fetch('/api/gca/order-details/' + gcaOrderId + '?env=' + encodeURIComponent(environment));
+                const data = await response.json();
+
+                if (!silent) {
+                    loading.classList.add('hidden');
+                    orderDetails.classList.remove('hidden');
+                }
+
+                if (data.success && data.extractedData) {
+                    const ext = data.extractedData;
+                    const returnData = {
+                        customerId: ext.formData?.customerId,
+                        requestId: orderId,
+                        orderId: gcaOrderId,
+                        requestVerificationToken: ext.formData?.requestVerificationToken
+                    };
+                    
+                    if (!silent) {
+                        orderDetailsContent.innerHTML = '<div class="mb-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">✓ Order Details Retrieved</span></div><div class="grid grid-cols-2 gap-3"><div><p class="text-sm text-gray-600">Customer ID</p><p class="font-semibold">' + returnData.customerId + '</p></div><div><p class="text-sm text-gray-600">Request ID</p><p class="font-semibold">' + returnData.requestId + '</p></div><div><p class="text-sm text-gray-600">GCA Order ID</p><p class="font-semibold">' + returnData.orderId + '</p></div><div><p class="text-sm text-gray-600">CSRF Token</p><p class="font-mono text-xs">✓ Available</p></div></div>';
+                    }
+                    
+                    return returnData;
+                } else {
+                    if (!silent) {
+                        orderDetailsContent.innerHTML = '<div class="text-red-600">Error: ' + (data.error || 'Failed to get order details') + '</div>';
+                    }
+                    return null;
+                }
+            } catch (error) {
+                if (!silent) {
+                    loading.classList.add('hidden');
+                    orderDetails.classList.remove('hidden');
+                    orderDetailsContent.innerHTML = '<div class="text-red-600">Error: ' + error.message + '</div>';
+                }
+                return null;
+            }
+        }
+
+        async function testApproveCreditAPI(orderDetails) {
+            if (!orderDetails || !orderDetails.customerId || !orderDetails.requestVerificationToken) {
+                alert('Missing required data: CustomerId=' + orderDetails?.customerId + ', Token=' + (orderDetails?.requestVerificationToken ? 'Present' : 'Missing'));
+                return;
+            }
+
+            const environment = document.getElementById('environment').value;
+            const loading = document.getElementById('loading');
+            const approveResult = document.getElementById('approveResult');
+            const approveResultContent = document.getElementById('approveResultContent');
+
+            loading.innerHTML = '<div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div><p class="mt-2 text-gray-600">Approving Credit...</p>';
+            loading.classList.remove('hidden');
+            approveResult.classList.add('hidden');
+
+            try {
+                const payload = {
+                    customerId: orderDetails.customerId,
+                    requestId: orderDetails.requestId,
+                    orderId: orderDetails.orderId,
+                    requestVerificationToken: orderDetails.requestVerificationToken,
+                    orderCreditResult: '2',
+                    orderCreditState: '3',
+                    creditHoldReason: '5',
+                    creditHoldAction: '0',
+                    comment: 'Automated approval via AVIATOR',
+                    emailNotification: true
+                };
+
+                console.log('Sending approval:', payload);
+
+                const response = await fetch('/api/gca/approve-credit?env=' + encodeURIComponent(environment), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+                
+                loading.classList.add('hidden');
+                approveResult.classList.remove('hidden');
+
+                if (data.success) {
+                    approveResultContent.innerHTML = '<div class="mb-4"><span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">✅ Credit Approved Successfully</span></div><div class="p-4 bg-green-50 border border-green-200 rounded"><p class="font-bold text-green-800">🎉 Complete Flow Success!</p><ul class="mt-2 text-sm space-y-1"><li>✓ Step 1: Searched order</li><li>✓ Step 2: Got order details</li><li>✓ Step 3: Approved credit</li></ul></div><div class="mt-4 grid grid-cols-2 gap-3"><div><p class="text-sm text-gray-600">Customer ID</p><p class="font-semibold">' + data.customerId + '</p></div><div><p class="text-sm text-gray-600">Order ID</p><p class="font-semibold">' + data.requestId + '</p></div></div>';
+                } else {
+                    approveResultContent.innerHTML = '<div class="text-red-600"><strong>Error:</strong> ' + data.error + '</div><pre class="mt-2 text-xs bg-white p-2 rounded border overflow-auto">' + JSON.stringify(data, null, 2) + '</pre>';
+                }
+            } catch (error) {
+                loading.classList.add('hidden');
+                approveResult.classList.remove('hidden');
+                approveResultContent.innerHTML = '<div class="text-red-600">Error: ' + error.message + '</div>';
+            }
+        }
+    </script>
+</body>
+</html>

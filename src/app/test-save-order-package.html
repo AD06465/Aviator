@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Swift SaveOrderPackage API Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .required {
+            color: red;
+        }
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            font-weight: bold;
+        }
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 2px solid #17a2b8;
+            color: #0c5460;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        .info-box ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Swift SaveOrderPackage API Test</h1>
+        <p class="subtitle">Test updating Order Type, OES, Coordinator, and NAE values in Swift orders</p>
+
+        <div class="info-box">
+            <h3>📋 What This Tests</h3>
+            <ul>
+                <li><strong>Order Type</strong> - Set the order type (Install, Disconnect, etc.)</li>
+                <li><strong>OES</strong> - Order Entry Specialist assignment</li>
+                <li><strong>Coordinator</strong> - Order Coordinator assignment</li>
+                <li><strong>NAE</strong> - Network Account Executive assignment</li>
+            </ul>
+            <p><strong>Use Case:</strong> When precheck validation finds these values missing, this API updates them.</p>
+        </div>
+
+        <form id="testForm">
+            <div class="grid">
+                <div class="form-group">
+                    <label for="transactionId">Transaction ID <span class="required">*</span></label>
+                    <input type="number" id="transactionId" name="transactionId" placeholder="556179217" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="environment">Environment <span class="required">*</span></label>
+                    <select id="environment" name="environment" required>
+                        <option value="Test 1" selected>Test 1</option>
+                        <option value="Test 2">Test 2</option>
+                        <option value="Test 4">Test 4</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="orderType">Order Type <span class="required">*</span></label>
+                    <select id="orderType" name="orderType" required>
+                        <option value="">Select Order Type</option>
+                        <option value="Install" selected>Install</option>
+                        <option value="Disconnect">Disconnect</option>
+                        <option value="Change">Change</option>
+                        <option value="Move">Move</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="selectedOES">Selected OES (Order Entry Specialist) <span class="required">*</span></label>
+                    <input type="text" id="selectedOES" name="selectedOES" placeholder="AD06465" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="selectedCoordinator">Selected Coordinator <span class="required">*</span></label>
+                    <input type="text" id="selectedCoordinator" name="selectedCoordinator" placeholder="AD06465" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="selectedNAE">Selected NAE (Network Account Executive) <span class="required">*</span></label>
+                    <input type="text" id="selectedNAE" name="selectedNAE" placeholder="AB81208" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="customerId">Customer ID</label>
+                    <input type="number" id="customerId" name="customerId" placeholder="966529">
+                </div>
+
+                <div class="form-group">
+                    <label for="customerNumber">Customer Number</label>
+                    <input type="text" id="customerNumber" name="customerNumber" placeholder="2-L3CJPK">
+                </div>
+            </div>
+
+            <button type="submit" id="submitBtn">🚀 Test API</button>
+        </form>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Calling Swift API...</p>
+        </div>
+
+        <div id="result" class="result"></div>
+    </div>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const loading = document.getElementById('loading');
+            const resultDiv = document.getElementById('result');
+            
+            // Get form values
+            const formData = {
+                transactionId: parseInt(document.getElementById('transactionId').value),
+                environment: document.getElementById('environment').value,
+                orderType: document.getElementById('orderType').value,
+                selectedOES: document.getElementById('selectedOES').value,
+                selectedCoordinator: document.getElementById('selectedCoordinator').value,
+                selectedNAE: document.getElementById('selectedNAE').value,
+                customerId: document.getElementById('customerId').value ? parseInt(document.getElementById('customerId').value) : 966529,
+                customerNumber: document.getElementById('customerNumber').value || '2-L3CJPK'
+            };
+            
+            // Show loading
+            submitBtn.disabled = true;
+            loading.style.display = 'block';
+            resultDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/swift/test/save-order-package', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const data = await response.json();
+                
+                // Hide loading
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+                
+                // Show result
+                resultDiv.style.display = 'block';
+                
+                if (data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.innerHTML = `
+                        <h3>✅ Success!</h3>
+                        <p><strong>API Response:</strong></p>
+                        <pre>${JSON.stringify(data.data, null, 2)}</pre>
+                        
+                        <p><strong>Metadata:</strong></p>
+                        <pre>${JSON.stringify(data.metadata, null, 2)}</pre>
+                        
+                        <p style="margin-top: 15px;">
+                            <strong>✓ Environment:</strong> ${formData.environment}<br>
+                            <strong>✓ Order Type:</strong> ${formData.orderType}<br>
+                            <strong>✓ OES:</strong> ${formData.selectedOES}<br>
+                            <strong>✓ Coordinator:</strong> ${formData.selectedCoordinator}<br>
+                            <strong>✓ NAE:</strong> ${formData.selectedNAE}
+                        </p>
+                    `;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.innerHTML = `
+                        <h3>❌ Error</h3>
+                        <p><strong>Error Message:</strong> ${data.error || 'Unknown error'}</p>
+                        ${data.statusCode ? `<p><strong>Status Code:</strong> ${data.statusCode}</p>` : ''}
+                        ${data.responseBody ? `<pre>${JSON.stringify(data.responseBody, null, 2)}</pre>` : ''}
+                        ${data.stack ? `<details><summary>Stack Trace</summary><pre>${data.stack}</pre></details>` : ''}
+                    `;
+                }
+            } catch (error) {
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.innerHTML = `
+                    <h3>❌ Request Failed</h3>
+                    <p><strong>Error:</strong> ${error.message}</p>
+                    <pre>${error.stack}</pre>
+                `;
+            }
+        });
+
+        // Auto-fill current user (if available)
+        window.addEventListener('load', () => {
+            const username = 'AD06465'; // Default - can be changed
+            document.getElementById('selectedOES').value = username;
+            document.getElementById('selectedCoordinator').value = username;
+        });
+    </script>
+</body>
+</html>

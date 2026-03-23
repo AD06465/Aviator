@@ -8,6 +8,7 @@ import TaskConfigManager from '../components/TaskConfigManager';
 import TaskConfigTable from '../components/TaskConfigTable';
 import BackupManager from '../components/BackupManager';
 import AutopilotMonitor from '../components/AutopilotMonitor';
+import SwiftMonitor from '../components/SwiftMonitor';
 import Toast from '../components/Toast';
 import { OrderForm as OrderFormType, Task, TaskManagementConfig, ProcessingStatus } from '../types';
 import { defaultTaskConfig } from '../lib/taskConfig';
@@ -21,7 +22,7 @@ export default function HomePage() {
   const [taskConfig, setTaskConfig] = useState<TaskManagementConfig>(defaultTaskConfig);
   const [processingStatus, setProcessingStatus] = useState<ProcessingStatus | null>(null);
   const [taskProcessor, setTaskProcessor] = useState<TaskProcessor | null>(null);
-  const [activeTab, setActiveTab] = useState<'monitor' | 'config' | 'table' | 'backup' | 'autopilot'>('table');
+  const [activeTab, setActiveTab] = useState<'monitor' | 'config' | 'table' | 'backup' | 'autopilot' | 'swift'>('table');
   const [isSearchingTasks, setIsSearchingTasks] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [lastSearchTime, setLastSearchTime] = useState<Date | null>(null);
@@ -133,8 +134,8 @@ export default function HomePage() {
     // Set up periodic task monitoring (separate from processing)
     // Only monitor FlightDeck when on monitor or table tabs
     const monitoringInterval = setInterval(async () => {
-      // Skip if on autopilot tab to reduce server load
-      if (activeTab === 'autopilot' || activeTab === 'config' || activeTab === 'backup') {
+      // Skip if on autopilot, swift, or config tabs to reduce server load
+      if (activeTab === 'autopilot' || activeTab === 'swift' || activeTab === 'config' || activeTab === 'backup') {
         console.log('Skipping FlightDeck monitoring - not on active tab');
         return;
       }
@@ -407,6 +408,18 @@ export default function HomePage() {
             >
               💾 Data Backup
             </button>
+            {currentOrder && (
+              <button
+                onClick={() => setActiveTab('swift')}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === 'swift'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                ⚡ Swift Monitor
+              </button>
+            )}
             {(tasks.length > 0 || processingStatus) && (
               <button
                 onClick={() => setActiveTab('monitor')}
@@ -463,6 +476,14 @@ export default function HomePage() {
             orderNumber={currentOrder.orderNumber}
             environment={currentOrder.environment}
             isActive={activeTab === 'autopilot'}
+          />
+        )}
+
+        {activeTab === 'swift' && currentOrder && (
+          <SwiftMonitor 
+            orderNumber={currentOrder.orderNumber}
+            environment={currentOrder.environment}
+            isActive={activeTab === 'swift'}
           />
         )}
 

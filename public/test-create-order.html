@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Swift Order Creation API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            font-family: 'Courier New', monospace;
+            min-height: 300px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #0066cc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .order-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #0066cc;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f0f8ff;
+            border-radius: 4px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Test Swift Order Creation API</h1>
+        
+        <div class="form-group">
+            <label for="environment">Environment:</label>
+            <select id="environment">
+                <option value="Test 1">Test 1 (swiftenv1)</option>
+                <option value="Test 2">Test 2 (swiftenv2)</option>
+                <option value="Test 4">Test 4 (swiftenv4)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="payload">Order Payload (JSON):</label>
+            <textarea id="payload">{
+  "order": {
+    "OrderPackageSource": "SWIFT",
+    "ContainsRsiProducts": false,
+    "PortingApplies": false,
+    "CustomerId": 966529,
+    "CustomerNumber": "2-L3CJPK",
+    "SelectedAccount": {
+      "AccountNumber": 304254,
+      "AccountName": "LEVEL 3 DEMO AND TESTING",
+      "Status": "Act",
+      "Market": "N American",
+      "MarketCode": "NA",
+      "CBPBAN": 304254,
+      "KenanBAN": "5-SCDKVVQ3",
+      "InvoiceDisplayBAN": "304254",
+      "City": "LITTLETON",
+      "StateProvince": "CO",
+      "PostalCode": "80124",
+      "CountryCode": "USA",
+      "CurrencyType": "USD",
+      "OperatingCompanyDescription": "100",
+      "StreetNumberPrefix": null,
+      "StreetNumber": "10475",
+      "DirPrefix": null,
+      "StreetName": "PARK MEADOWS",
+      "Thoroughfare": "DR",
+      "DirSuffix": null,
+      "Floor": "",
+      "Building": null,
+      "Suite": "",
+      "AddressDisplay": "10475 PARK MEADOWS DR , LITTLETON COLORADO 80124 5433 UNITED STATES",
+      "AddressLine1": null,
+      "GeoPoliticalInfo": "LITTLETON COLORADO 80124 5433 UNITED STATES",
+      "IsDisabled": false,
+      "CBPandKenanBAN": "304254/5-SCDKVVQ3"
+    },
+    "SelectedSalesOffice": {
+      "SalesOfficeName": "Albany, NY",
+      "MarketName": "Albany",
+      "BSWAMarketName": "ALBANY"
+    },
+    "SelectedProduct": "eProducts",
+    "IsCspCustomerExecutedMsa": false,
+    "CommunicateWithBilling": false,
+    "SelectedGlobalRegion": "NA"
+  }
+}</textarea>
+        </div>
+
+        <button id="testBtn" onclick="testCreateOrder()">
+            Create Order
+        </button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testCreateOrder() {
+            const btn = document.getElementById('testBtn');
+            const resultDiv = document.getElementById('result');
+            const environment = document.getElementById('environment').value;
+            const payloadText = document.getElementById('payload').value;
+
+            // Validate JSON
+            let payload;
+            try {
+                payload = JSON.parse(payloadText);
+            } catch (e) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '❌ Invalid JSON in payload:\n' + e.message;
+                return;
+            }
+
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.innerHTML = 'Creating Order...<span class="loading"></span>';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '⏳ Sending request to create order package...';
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('http://localhost:3000/api/swift/create-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        ...payload,
+                        environment: environment
+                    })
+                });
+
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    let output = `✅ Order Package Created Successfully!\n\n`;
+                    output += `⏱️ Time: ${elapsed}s\n\n`;
+                    
+                    if (data.orderNumber) {
+                        output += `📦 ORDER NUMBER: ${data.orderNumber}\n\n`;
+                        // Add highlighted order number
+                        const orderDiv = document.createElement('div');
+                        orderDiv.className = 'order-number';
+                        orderDiv.textContent = `📦 Order #${data.orderNumber}`;
+                        resultDiv.innerHTML = '';
+                        resultDiv.appendChild(orderDiv);
+                        const pre = document.createElement('pre');
+                        pre.textContent = output;
+                        resultDiv.appendChild(pre);
+                    } else {
+                        output += `Full Response:\n${JSON.stringify(data, null, 2)}`;
+                        resultDiv.textContent = output;
+                    }
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: HTTP ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Request Failed (${elapsed}s)\n\nError: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Create Order';
+            }
+        }
+
+        // Allow Ctrl+Enter to submit
+        document.getElementById('payload').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                testCreateOrder();
+            }
+        });
+    </script>
+</body>
+</html>
