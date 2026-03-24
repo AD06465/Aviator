@@ -23,6 +23,7 @@
     "axios": "^1.6.0",
     "axios-ntlm": "^1.4.6",
     "date-fns": "^2.30.0",
+    "form-data": "^4.0.0",
     "framer-motion": "^10.16.0",
     "httpntlm": "^1.8.13",
     "lucide-react": "^0.263.1",

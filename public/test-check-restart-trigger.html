@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swift Check Restart Trigger - Test Page</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #2c3e50;
+      border-bottom: 3px solid #3498db;
+      padding-bottom: 10px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 5px;
+      color: #34495e;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: monospace;
+    }
+    textarea {
+      min-height: 300px;
+      resize: vertical;
+    }
+    button {
+      background: #3498db;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      font-size: 16px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 10px;
+    }
+    button:hover {
+      background: #2980b9;
+    }
+    button:disabled {
+      background: #bdc3c7;
+      cursor: not-allowed;
+    }
+    .success {
+      background: #27ae60;
+    }
+    .success:hover {
+      background: #229954;
+    }
+    #result {
+      margin-top: 30px;
+      padding: 20px;
+      background: #ecf0f1;
+      border-radius: 4px;
+      white-space: pre-wrap;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+    .error {
+      background: #e74c3c;
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .warning {
+      background: #f39c12;
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-weight: bold;
+      margin: 10px 0;
+    }
+    .status-safe {
+      background: #27ae60;
+      color: white;
+    }
+    .status-warning {
+      background: #f39c12;
+      color: white;
+    }
+    .status-danger {
+      background: #e74c3c;
+      color: white;
+    }
+    .info-box {
+      background: #3498db;
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+    }
+    .code-block {
+      background: #2c3e50;
+      color: #ecf0f1;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔍 Swift Check Restart Trigger API - Test Page</h1>
+    
+    <div class="info-box">
+      <strong>Purpose:</strong> This endpoint validates if order package changes would trigger a workflow restart BEFORE actually saving them.
+      <br><br>
+      <strong>Usage:</strong> Call this API BEFORE SaveOrderPackage to detect:
+      <ul style="margin: 10px 0 0 20px;">
+        <li>PSP property changes (Hot Cut, Overlapping Service, Delivery_Region_Code)</li>
+        <li>Product hierarchy changes</li>
+        <li>Attribute changes that require workflow restart</li>
+      </ul>
+    </div>
+
+    <div class="form-group">
+      <label for="orderId">Order ID / Transaction ID:</label>
+      <input type="text" id="orderId" placeholder="e.g., 556181595" value="556181595">
+    </div>
+
+    <div class="form-group">
+      <label for="environment">Environment:</label>
+      <select id="environment">
+        <option value="Test 1" selected>Test 1 (swiftenv1)</option>
+        <option value="Test 2">Test 2 (swiftenv2)</option>
+        <option value="Test 4">Test 4 (swiftenv4)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="orderDetail">Order Detail JSON:</label>
+      <textarea id="orderDetail" placeholder='Paste orderDetail object from Swift API response...'>
+{
+  "IsDetailUpdated": true,
+  "TransactionId": 556181595,
+  "WorkflowId": "0900000000000000000000016678401",
+  "BusinessOrderId": 3569105,
+  "CustomerId": 966529,
+  "CustomerNumber": "2-L3CJPK",
+  "OrderType": "Install",
+  "SelectedOES": "AD06465",
+  "SelectedCoordinator": "AD06465",
+  "SelectedNAE": "AB81208"
+}</textarea>
+    </div>
+
+    <div class="form-group">
+      <label for="productPackages">Product Packages Array JSON:</label>
+      <textarea id="productPackages" placeholder='Paste productPackages array from Swift API response...'>
+[
+  {
+    "ProductPackageId": 464259129,
+    "TransactionId": 556181595,
+    "Properties": [
+      {
+        "PropertyName": "Hot Cut / Replacement",
+        "PropertyValue": "No"
+      },
+      {
+        "PropertyName": "Overlapping Service?",
+        "PropertyValue": "No"
+      },
+      {
+        "PropertyName": "Delivery_Region_Code",
+        "PropertyValue": "NA"
+      }
+    ]
+  }
+]</textarea>
+    </div>
+
+    <div>
+      <button onclick="checkRestartTrigger()">🔍 Check Restart Trigger</button>
+      <button onclick="clearResult()">🗑️ Clear Result</button>
+    </div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    async function checkRestartTrigger() {
+      const resultDiv = document.getElementById('result');
+      const orderId = document.getElementById('orderId').value;
+      const environment = document.getElementById('environment').value;
+      
+      // Parse JSON inputs
+      let orderDetail, productPackages;
+      try {
+        orderDetail = JSON.parse(document.getElementById('orderDetail').value);
+        productPackages = JSON.parse(document.getElementById('productPackages').value);
+      } catch (e) {
+        resultDiv.innerHTML = `<div class="error">❌ JSON Parse Error: ${e.message}</div>`;
+        return;
+      }
+
+      if (!orderId) {
+        resultDiv.innerHTML = '<div class="error">❌ Please enter an Order ID</div>';
+        return;
+      }
+
+      resultDiv.innerHTML = '<div class="warning">⏳ Checking if changes would trigger restart...</div>';
+
+      try {
+        const startTime = Date.now();
+        
+        const response = await fetch(`/api/swift/check-restart-trigger/${orderId}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            orderDetail,
+            productPackages,
+            environment
+          })
+        });
+
+        const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+        const result = await response.json();
+
+        let html = '';
+        
+        if (result.success) {
+          const data = result.data;
+          const willRestart = data.willTriggerRestart;
+          
+          // Status badge
+          html += `<div class="status-badge ${willRestart ? 'status-danger' : 'status-safe'}">`;
+          html += willRestart ? '⚠️ RESTART WOULD BE TRIGGERED' : '✅ NO RESTART - SAFE TO PROCEED';
+          html += `</div>`;
+          
+          html += `<div class="code-block">`;
+          html += `<strong>Response (${duration}s):</strong>\n\n`;
+          html += `IsRestartWorkflow: ${data.isRestartWorkflow}\n`;
+          html += `WillTriggerRestart: ${data.willTriggerRestart}\n\n`;
+          
+          if (data.restartTriggeringChanges && data.restartTriggeringChanges.length > 0) {
+            html += `<strong style="color: #e74c3c;">Restart Triggering Changes:</strong>\n`;
+            data.restartTriggeringChanges.forEach(change => {
+              html += `  • ${change}\n`;
+            });
+            html += `\n`;
+          }
+          
+          if (data.pspChanges && data. pspChanges.length > 0) {
+            html += `<strong>PSP Changes Detected:</strong>\n`;
+            html += JSON.stringify(data.pspChanges, null, 2);
+            html += `\n\n`;
+          }
+          
+          html += `<strong>Full Response:</strong>\n`;
+          html += JSON.stringify(result, null, 2);
+          html += `</div>`;
+          
+          // Recommendation
+          if (willRestart) {
+            html += `<div class="error">`;
+            html += `<strong>⚠️ RECOMMENDATION:</strong> Do NOT proceed with save. `;
+            html += `The changes would restart the workflow. Review and preserve existing PSP Properties.`;
+            html += `</div>`;
+          } else {
+            html += `<div style="background: #27ae60; color: white; padding: 15px; border-radius: 4px; margin-top: 15px;">`;
+            html += `<strong>✅ SAFE TO PROCEED:</strong> Changes will not trigger a workflow restart.`;
+            html += `</div>`;
+          }
+          
+        } else {
+          html += `<div class="error">`;
+          html += `<strong>❌ API Error (${duration}s):</strong>\n\n`;
+          html += result.error;
+          html += `</div>`;
+          
+          if (result.details) {
+            html += `<div class="code-block">`;
+            html += `<strong>Error Details:</strong>\n`;
+            html += JSON.stringify(result.details, null, 2);
+            html += `</div>`;
+          }
+        }
+
+        resultDiv.innerHTML = html;
+      } catch (error) {
+        resultDiv.innerHTML = `<div class="error">❌ Request Failed: ${error.message}</div>`;
+      }
+    }
+
+    function clearResult() {
+      document.getElementById('result').innerHTML = '';
+    }
+
+    // Allow Enter key to submit
+    document.getElementById('orderId').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') checkRestartTrigger();
+    });
+  </script>
+</body>
+</html>

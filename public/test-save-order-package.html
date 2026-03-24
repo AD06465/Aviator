@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Save Order Package API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #28a745;
+            padding-bottom: 10px;
+        }
+        .workflow {
+            background: #e7f3ff;
+            border: 2px solid #2196F3;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .workflow h2 {
+            margin-top: 0;
+            color: #1976D2;
+            font-size: 18px;
+        }
+        .workflow ol {
+            margin: 10px 0;
+            padding-left: 25px;
+        }
+        .workflow li {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        .workflow .current {
+            font-weight: bold;
+            color: #28a745;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #28a745;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #218838;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #28a745;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💾 Test Save Order Package API</h1>
+        
+        <div class="workflow">
+            <h2>📋 Swift Order Creation Workflow</h2>
+            <ol>
+                <li>✅ <strong>Create Order Package</strong> - Creates the order (<a href="/test-create-order.html">test-create-order.html</a>)</li>
+                <li class="current">⏺️ <strong>Save Order Package</strong> - Persists the order to database (YOU ARE HERE)</li>
+                <li>🔧 <strong>Add Product Package</strong> - Adds products to the saved order (<a href="/test-add-product-package.html">test-add-product-package.html</a>)</li>
+            </ol>
+            <p style="margin-bottom: 0; margin-top: 15px;"><strong>⚠️ Important:</strong> You must complete steps 1 and 2 before you can add products in step 3!</p>
+        </div>
+
+        <div class="form-group">
+            <label for="orderNumber">Order Number (Transaction ID):</label>
+            <input type="number" id="orderNumber" placeholder="556181595" required>
+        </div>
+
+        <div class="form-group">
+            <label for="environment">Environment:</label>
+            <select id="environment">
+                <option value="Test 1">Test 1 (swiftenv1)</option>
+                <option value="Test 2">Test 2 (swiftenv2)</option>
+                <option value="Test 4">Test 4 (swiftenv4)</option>
+            </select>
+        </div>
+
+        <button id="saveBtn" onclick="saveOrderPackage()">
+            Save Order Package
+        </button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Check if order number was passed in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderParam = urlParams.get('order');
+        
+        if (orderParam) {
+            document.getElementById('orderNumber').value = orderParam;
+            
+            // Check if we have stored order data
+            const storedData = sessionStorage.getItem(`order_${orderParam}`);
+            if (storedData) {
+                const orderInfo = JSON.parse(storedData);
+                document.getElementById('environment').value = orderInfo.environment || 'Test 1';
+                
+                // Show a message that we found the stored data
+                const resultDiv = document.getElementById('result');
+                resultDiv.className = 'result info';
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = `✅ Found order data from creation step!\nOrder: ${orderParam}\nEnvironment: ${orderInfo.environment}\nCreated: ${new Date(orderInfo.createdAt).toLocaleString()}\n\nReady to save to database.`;
+            }
+        }
+        
+        async function saveOrderPackage() {
+            const btn = document.getElementById('saveBtn');
+            const resultDiv = document.getElementById('result');
+            const orderNumber = document.getElementById('orderNumber').value;
+            const environment = document.getElementById('environment').value;
+
+            if (!orderNumber) {
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = '❌ Please enter an order number (Transaction ID)';
+                return;
+            }
+
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.innerHTML = 'Saving Order Package...<span class="loading"></span>';
+            resultDiv.className = 'result info';
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = `⏳ Saving order package ${orderNumber} to database...`;
+
+            const startTime = Date.now();
+
+            try {
+                // First try to get order data from sessionStorage
+                let orderData = null;
+                const storedData = sessionStorage.getItem(`order_${orderNumber}`);
+                
+                if (storedData) {
+                    resultDiv.textContent += `\n✅ Using order data from creation step (avoids version conflict)`;
+                    const orderInfo = JSON.parse(storedData);
+                    orderData = orderInfo.orderData;
+                } else {
+                    // Fallback: Fetch from Swift if not in sessionStorage
+                    resultDiv.textContent += `\n⚠️ Order data not found in session, attempting to fetch from Swift...`;
+                    
+                    const orderResponse = await fetch(`http://localhost:3000/api/swift/orderpackage/${orderNumber}?env=${encodeURIComponent(environment)}`);
+                    
+                    if (!orderResponse.ok) {
+                        const errorData = await orderResponse.json();
+                        throw new Error(`Failed to fetch order data: ${errorData.error || orderResponse.status}`);
+                    }
+
+                    const orderResult = await orderResponse.json();
+                    
+                    if (!orderResult.success || !orderResult.data) {
+                        throw new Error('Order data not found or invalid response');
+                    }
+
+                    orderData = orderResult.data;
+                    resultDiv.textContent += `\n✅ Order data fetched successfully`;
+                }
+                
+                resultDiv.textContent += `\n⏳ Saving to database...`;
+
+                // Now save the order package with the order data
+                const response = await fetch(`http://localhost:3000/api/swift/save-order-package/${orderNumber}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        transactionId: parseInt(orderNumber),
+                        environment: environment,
+                        existingOrderData: orderData
+                    })
+                });
+
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    // Clear the stored order data since it's been saved
+                    sessionStorage.removeItem(`order_${orderNumber}`);
+                    
+                    resultDiv.className = 'result success';
+                    let output = `✅ Order Package Saved Successfully!\n\n`;
+                    output += `⏱️ Time: ${elapsed}s\n\n`;
+                    output += `📦 Order Number: ${orderNumber}\n`;
+                    output += `🌍 Environment: ${environment}\n\n`;
+                    output += `✨ Next Step: You can now add products to this order!\n`;
+                    
+                    // Create a clickable link to next step
+                    const successDiv = document.createElement('div');
+                    successDiv.style.cssText = 'background: #d4edda; padding: 20px; border-radius: 4px; border: 1px solid #c3e6cb;';
+                    successDiv.innerHTML = `
+                        <div style="font-family: 'Courier New', monospace; color: #155724; white-space: pre-wrap;">${output}</div>
+                        <a href="/test-add-product-package.html?order=${orderNumber}" 
+                           style="background: #0066cc; color: white; padding: 12px 24px; text-decoration: none; 
+                                  border-radius: 4px; display: inline-block; margin-top: 15px; font-weight: 600;">
+                            ➡️ Continue to Step 3: Add Products
+                        </a>
+                        <div style="margin-top: 15px; font-family: 'Courier New', monospace; font-size: 12px; color: #155724;">
+                            Full Response:\n${JSON.stringify(data, null, 2)}
+                        </div>
+                    `;
+                    resultDiv.innerHTML = '';
+                    resultDiv.appendChild(successDiv);
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: HTTP ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Request Failed (${elapsed}s)\n\nError: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Save Order Package';
+            }
+        }
+
+        // Allow Enter key in order number field
+        document.getElementById('orderNumber').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveOrderPackage();
+            }
+        });
+    </script>
+</body>
+</html>

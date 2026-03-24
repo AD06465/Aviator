@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Set PSP Dates (NDD/CRD)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #9c27b0;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background: #e1bee7;
+            border: 2px solid #9c27b0;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        .info-box h2 {
+            margin-top: 0;
+            color: #6a1b9a;
+            font-size: 18px;
+        }
+        .info-box p {
+            margin: 8px 0;
+            line-height: 1.6;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        button {
+            background: #9c27b0;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #7b1fa2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #9c27b0;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📅 Test Set PSP Dates (NDD/CRD)</h1>
+        
+        <div class="info-box">
+            <h2>📋 Workflow - Step 3</h2>
+            <p><strong>Workflow:</strong> 
+                <a href="test-create-order.html">1️⃣ Create Order</a> → 
+                <a href="test-save-order-package.html">2️⃣ Save Order</a> → 
+                <strong>3️⃣ Set PSP Dates</strong> → 
+                <a href="test-check-documents.html">4️⃣ Check Documents</a> → 
+                5️⃣ Add Documents → 
+                <a href="test-add-product-package.html">6️⃣ Add Products</a>
+            </p>
+            <p style="margin-top: 15px;"><strong>NDD (Negotiated Due Date):</strong> The date negotiated with the customer for service delivery</p>
+            <p><strong>CRD (Customer Requested Date):</strong> The date originally requested by the customer</p>
+            <p style="margin-top: 15px;"><strong>⚠️ Important:</strong> Both dates must be set on all PSPs before an order can be processed. This tool sets them automatically.</p>
+            <p style="margin-top: 10px;"><strong>📅 Default Calculation:</strong> Current date + 5 business days (excludes weekends)</p>
+        </div>
+
+        <div class="form-group">
+            <label for="orderNumber">Order Number (Transaction ID):</label>
+            <input type="number" id="orderNumber" placeholder="556181595" required>
+        </div>
+
+        <div class="form-group">
+            <label for="environment">Environment:</label>
+            <select id="environment">
+                <option value="Test 1">Test 1 (swiftenv1)</option>
+                <option value="Test 2">Test 2 (swiftenv2)</option>
+                <option value="Test 4">Test 4 (swiftenv4)</option>
+            </select>
+        </div>
+
+        <div class="form-row">
+            <div class="form-group">
+                <label for="ndd">NDD (Negotiated Due Date):</label>
+                <input type="date" id="ndd" required>
+                <small style="color: #666; margin-top: 5px; display: block;">Defaults to today + 5 business days</small>
+            </div>
+            <div class="form-group">
+                <label for="crd">CRD (Customer Requested Date):</label>
+                <input type="date" id="crd" required>
+                <small style="color: #666; margin-top: 5px; display: block;">Defaults to today + 5 business days</small>
+            </div>
+        </div>
+
+        <button id="setPspDatesBtn" onclick="setPspDates()">
+            Set PSP Dates
+        </button>
+        <button class="secondary" onclick="checkDates()">
+            Check Current Dates
+        </button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Calculate business days (skip weekends)
+        function calculateBusinessDays(daysToAdd) {
+            const date = new Date();
+            let addedDays = 0;
+            
+            while (addedDays < daysToAdd) {
+                date.setDate(date.getDate() + 1);
+                // 0 = Sunday, 6 = Saturday
+                const dayOfWeek = date.getDay();
+                if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+                    addedDays++;
+                }
+            }
+            
+            return date;
+        }
+
+        // Set default dates to current date + 5 business days
+        const defaultDate = calculateBusinessDays(5);
+        document.getElementById('ndd').valueAsDate = defaultDate;
+        document.getElementById('crd').valueAsDate = defaultDate;
+
+        // Check if order number was passed in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderParam = urlParams.get('order');
+        if (orderParam) {
+            document.getElementById('orderNumber').value = orderParam;
+        }
+
+        // Convert date input to M/D/YYYY format
+        function formatDate(dateInput) {
+            const date = new Date(dateInput);
+            return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+        }
+
+        async function checkDates() {
+            const orderNumber = document.getElementById('orderNumber').value;
+            const environment = document.getElementById('environment').value;
+            const resultDiv = document.getElementById('result');
+
+            if (!orderNumber) {
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = '❌ Please enter an order number';
+                return;
+            }
+
+            resultDiv.className = 'result info';
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '⏳ Fetching order data...';
+
+            try {
+                const response = await fetch(`http://localhost:3000/api/swift/orderpackage/${orderNumber}?env=${encodeURIComponent(environment)}`);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    const psps = data.data.ProductPackageSummaries || [];
+                    let output = `✅ Order ${orderNumber} - Found ${psps.length} PSP(s)\n\n`;
+                    
+                    psps.forEach((psp, index) => {
+                        const hasNdd = psp.NegotiatedDueDate && psp.NegotiatedDueDate !== null;
+                        const hasCrd = psp.CustomerRequestedDate && psp.CustomerRequestedDate !== null;
+                        
+                        output += `PSP ${index + 1}: ${psp.ProductName} (ID: ${psp.ProductPackageId})\n`;
+                        output += `  NDD: ${hasNdd ? '✅ ' + psp.NegotiatedDueDate : '❌ NOT SET'}\n`;
+                        output += `  CRD: ${hasCrd ? '✅ ' + psp.CustomerRequestedDate : '❌ NOT SET'}\n`;
+                        output += `\n`;
+                    });
+
+                    const missingDates = psps.filter(psp => 
+                        !psp.NegotiatedDueDate || !psp.CustomerRequestedDate
+                    );
+
+                    if (missingDates.length > 0) {
+                        resultDiv.className = 'result error';
+                        output += `\n⚠️ ${missingDates.length} PSP(s) missing dates - Click "Set PSP Dates" to fix this`;
+                    } else {
+                        resultDiv.className = 'result success';
+                        output += `\n✅ All PSPs have dates set!`;
+                    }
+
+                    resultDiv.textContent = output;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: ${data.error || 'Failed to fetch order data'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Request Failed: ${error.message}`;
+            }
+        }
+
+        async function setPspDates() {
+            const btn = document.getElementById('setPspDatesBtn');
+            const resultDiv = document.getElementById('result');
+            const orderNumber = document.getElementById('orderNumber').value;
+            const environment = document.getElementById('environment').value;
+            const nddInput = document.getElementById('ndd').value;
+            const crdInput = document.getElementById('crd').value;
+
+            if (!orderNumber || !nddInput || !crdInput) {
+                resultDiv.className = 'result error';
+                resultDiv.style.display = 'block';
+                resultDiv.textContent = '❌ Please fill in all fields';
+                return;
+            }
+
+            const ndd = formatDate(nddInput);
+            const crd = formatDate(crdInput);
+
+            btn.disabled = true;
+            btn.innerHTML = 'Setting PSP Dates...<span class="loading"></span>';
+            resultDiv.className = 'result info';
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = `⏳ Setting PSP dates for order ${orderNumber}...\nNDD: ${ndd}\nCRD: ${crd}`;
+
+            const startTime = Date.now();
+
+            try {
+                // First, get the order package data
+                resultDiv.textContent += '\n⏳ Fetching order data...';
+                const orderResponse = await fetch(`http://localhost:3000/api/swift/orderpackage/${orderNumber}?env=${encodeURIComponent(environment)}`);
+                
+                if (!orderResponse.ok) {
+                    throw new Error(`Failed to fetch order data: ${orderResponse.status}`);
+                }
+
+                const orderData = await orderResponse.json();
+                
+                if (!orderData.success) {
+                    throw new Error(orderData.error || 'Failed to fetch order data');
+                }
+
+                resultDiv.textContent += '\n✅ Order data fetched';
+                resultDiv.textContent += '\n⏳ Setting dates on PSPs...';
+
+                // Now set the PSP dates
+                const response = await fetch(`http://localhost:3000/api/swift/save-product-dates/${orderNumber}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        environment: environment,
+                        orderPackageData: orderData.data,
+                        ndd: ndd,
+                        crd: crd
+                    })
+                });
+
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    let output = `✅ PSP Dates Set Successfully!\n\n`;
+                    output += `⏱️ Time: ${elapsed}s\n\n`;
+                    output += `📦 Order Number: ${orderNumber}\n`;
+                    output += `📅 NDD: ${ndd}\n`;
+                    output += `📅 CRD: ${crd}\n`;
+                    output += `📊 Updated PSPs: ${(data.updatedPspIds || []).length}\n`;
+                    output += `🔢 PSP IDs: ${(data.updatedPspIds || []).join(', ')}\n\n`;
+                    output += `ℹ️ All PSPs on this order now have matching NDD and CRD dates\n\n`;
+                    output += `✨ Click "Check Current Dates" to verify the update!\n\n`;
+                    output += `Full Response:\n${JSON.stringify(data, null, 2)}`;
+                    resultDiv.textContent = output;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: HTTP ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Request Failed (${elapsed}s)\n\nError: ${error.message}`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Set PSP Dates';
+            }
+        }
+
+        // Allow Enter key in order number field
+        document.getElementById('orderNumber').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                checkDates();
+            }
+        });
+    </script>
+</body>
+</html>

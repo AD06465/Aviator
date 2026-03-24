@@ -105,7 +105,9 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
         addLog(`⚠️ Failed to fetch order contacts: ${contactsResult.error}`, 'warning');
       }
 
-      let validation = swiftApiService.validateOrderPackage(result.data, contactsResult.success ? contactsResult.data : undefined);
+      // Validate order with all prechecks (OrderType, Coordinator, OES, PSP Dates, Documents, Contacts)
+      addLog('🔍 Validating order package (checking preconditions)...', 'info');
+      let validation = await swiftApiService.validateOrderPackage(orderNumber, result.data, contactsResult.success ? contactsResult.data : undefined);
       console.log('[SwiftMonitor] Validation result:', validation);
       console.log('[SwiftMonitor] Missing fields:', validation.missingFields);
       console.log('[SwiftMonitor] Order Detail:', result.data?.OrderDetail);
@@ -156,6 +158,31 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
             // Include NAE in update attempt if it's missing
             const fieldsToUpdate = shouldUpdateNAE ? [...validation.missingFields, 'NAE'] : validation.missingFields;
             
+            // STEP 1: Check if changes would trigger workflow restart (using current data)
+            // Note: Actual save will use fresh data to avoid version conflicts
+            addLog('🔍 Validating changes before save...', 'info');
+            const restartCheck = await swiftApiService.checkRestartTrigger(
+              orderNumber,
+              result.data.OrderDetail,
+              result.data.ProductPackages || []
+            );
+            
+            if (restartCheck.success && restartCheck.data) {
+              if (restartCheck.data.willTriggerRestart) {
+                addLog('⚠️ WARNING: Changes would trigger workflow restart!', 'warning');
+                addLog(`   Triggering changes: ${restartCheck.data.restartTriggeringChanges.join(', ')}`, 'warning');
+                // Continue anyway since we're preserving PSPs - should not restart
+                addLog('   → Proceeding (PSPs are preserved)', 'info');
+              } else {
+                addLog('✓ Validation passed - no restart will be triggered', 'success');
+              }
+            } else {
+              // Non-blocking - continue even if validation check fails
+              addLog('⚠️ Could not validate restart trigger - proceeding anyway', 'warning');
+            }
+            
+            // STEP 2: Update order package (will fetch fresh data internally to avoid version conflicts)
+            addLog('📝 Updating order package with latest data...', 'info');
             const updateResult = await swiftApiService.updateOrderPackage(
               orderNumber,
               result.data,
@@ -190,7 +217,8 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
                 // Update order package details for display
                 setOrderPackageDetails(revalidateResult.data);
                 
-                const revalidation = swiftApiService.validateOrderPackage(
+                const revalidation = await swiftApiService.validateOrderPackage(
+                  orderNumber,
                   revalidateResult.data,
                   contactsResult.success ? contactsResult.data : undefined
                 );
@@ -211,10 +239,13 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
                     return true;
                   }
                 } else {
-                  // Check if only non-critical issues remain
-                  const criticalFieldsStillMissing = revalidation.missingFields.filter(f => f !== 'Contacts');
+                  // Check if only auto-fixable issues remain (Contacts, PSP Dates)
+                  // Documents are now required and blocking after auto-upload attempt
+                  const criticalFieldsStillMissing = revalidation.missingFields.filter(f => 
+                    !['Contacts', 'PSP Dates'].includes(f)
+                  );
                   if (criticalFieldsStillMissing.length === 0) {
-                    addLog('✅ Critical fields are set - proceeding with validation', 'success');
+                    addLog('✅ Critical fields are set - proceeding with auto-fixes for remaining fields', 'success');
                     result.data = revalidateResult.data;
                     validation = revalidation;
                   } else {
@@ -259,6 +290,142 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
           addLog(`⚠️ Skipping update - already tried ${MAX_UPDATE_RETRIES} times`, 'warning');
           addLog(`💡 Please manually set: ${orderFieldsMissing.join(', ')} in Swift UI`, 'info');
           setIsValidationBlocking(false);
+        }
+
+        // If PSP Dates are missing, automatically set them (NDD and CRD)
+        if (validation.missingFields.includes('PSP Dates') && result.data) {
+          addLog('📅 PSP Dates missing - automatically setting NDD and CRD...', 'info');
+          addLog('   → Setting dates to: Current date + 5 business days', 'info');
+          
+          try {
+            const setPspDatesResult = await swiftApiService.setPspDates(
+              orderNumber,
+              result.data
+              // Uses default dates: current date + 5 business days
+            );
+            
+            if (setPspDatesResult.success) {
+              addLog('✅ Successfully set PSP dates (NDD and CRD)', 'success');
+              
+              // Re-validate after setting dates
+              addLog('🔍 Re-validating order after setting PSP dates...', 'info');
+              await new Promise(resolve => setTimeout(resolve, 1000)); // Brief delay
+              
+              const revalidateResult = await swiftApiService.fetchOrderPackage(orderNumber);
+              
+              if (revalidateResult.success && revalidateResult.data) {
+                setOrderPackageDetails(revalidateResult.data);
+                
+                validation = await swiftApiService.validateOrderPackage(
+                  orderNumber,
+                  revalidateResult.data,
+                  contactsResult.success ? contactsResult.data : undefined
+                );
+                setValidationResult(validation);
+                
+                // Update result.data to use fresh order package data
+                result.data = revalidateResult.data;
+                
+                if (validation.missingFields.includes('PSP Dates')) {
+                  addLog('⚠️ PSP Dates still missing after update', 'warning');
+                } else {
+                  addLog('✅ PSP Dates validated successfully!', 'success');
+                }
+              }
+            } else {
+              addLog(`⚠️ Failed to set PSP dates: ${setPspDatesResult.error}`, 'warning');
+              addLog('💡 You may need to manually set NDD and CRD dates in Swift UI', 'info');
+            }
+          } catch (error: any) {
+            addLog(`❌ Error setting PSP dates: ${error.message}`, 'error');
+            addLog('💡 You may need to manually set NDD and CRD dates in Swift UI', 'info');
+          }
+        }
+
+        // If documents are missing, automatically upload template document
+        if (validation.missingFields.includes('Documents') && result.data) {
+          addLog('📄 Documents missing - automatically uploading template...', 'info');
+          
+          try {
+            // Check which documents are required
+            const requiredDocsResult = await swiftApiService.loadRequiredDocuments(
+              orderNumber,
+              result.data
+            );
+
+            if (requiredDocsResult.success && requiredDocsResult.data) {
+              const { documentTypes } = requiredDocsResult.data;
+              const missingDocs = documentTypes.filter((doc: any) => !doc.attached);
+              
+              if (missingDocs.length > 0) {
+                // For now, upload SOF template for any missing documents
+                // You can extend this to handle different document types
+                const docType = missingDocs[0].type; // e.g., "SOF"
+                const docName = missingDocs[0].name; // e.g., "Service Order Form"
+                
+                addLog(`   → Uploading template for: ${docName} (${docType})`, 'info');
+                
+                // Fetch the template file from /public/templates/
+                const templateUrl = '/templates/SOF.pdf';
+                const response = await fetch(templateUrl);
+                
+                if (!response.ok) {
+                  throw new Error(`Template file not found: ${templateUrl}`);
+                }
+                
+                const blob = await response.blob();
+                const file = new File([blob], 'SOF.pdf', { type: 'application/pdf' });
+                
+                addLog(`   → Template loaded: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`, 'info');
+                
+                // Upload the document
+                const uploadResult = await swiftApiService.addDocumentToOrder(
+                  orderNumber,
+                  file,
+                  result.data,
+                  docType
+                );
+                
+                if (uploadResult.success) {
+                  addLog(`✅ Successfully uploaded document: ${uploadResult.data?.fileName}`, 'success');
+                  
+                  // Re-validate after uploading document
+                  addLog('🔍 Re-validating order after document upload...', 'info');
+                  await new Promise(resolve => setTimeout(resolve, 1000)); // Brief delay
+                  
+                  const revalidateResult = await swiftApiService.fetchOrderPackage(orderNumber);
+                  
+                  if (revalidateResult.success && revalidateResult.data) {
+                    setOrderPackageDetails(revalidateResult.data);
+                    
+                    validation = await swiftApiService.validateOrderPackage(
+                      orderNumber,
+                      revalidateResult.data,
+                      contactsResult.success ? contactsResult.data : undefined
+                    );
+                    setValidationResult(validation);
+                    
+                    // Update result.data to use fresh order package data
+                    result.data = revalidateResult.data;
+                    
+                    if (validation.missingFields.includes('Documents')) {
+                      addLog('⚠️ Documents still missing after upload', 'warning');
+                    } else {
+                      addLog('✅ Documents validated successfully!', 'success');
+                    }
+                  }
+                } else {
+                  addLog(`⚠️ Failed to upload document: ${uploadResult.error}`, 'warning');
+                  addLog('💡 You may need to manually upload documents in Swift UI', 'info');
+                }
+              }
+            } else {
+              addLog('⚠️ Could not determine required documents', 'warning');
+            }
+          } catch (error: any) {
+            addLog(`❌ Error uploading document: ${error.message}`, 'error');
+            addLog('💡 You may need to manually upload documents in Swift UI', 'info');
+          }
         }
 
         // If contacts are missing, automatically add the first available contact
@@ -331,7 +498,8 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
                   
                   if (refreshedOrderResult.success && refreshedContactsResult.success) {
                     // Re-validate with FRESH data
-                    const revalidation = swiftApiService.validateOrderPackage(
+                    const revalidation = await swiftApiService.validateOrderPackage(
+                      orderNumber,
                       refreshedOrderResult.data,
                       refreshedContactsResult.data
                     );
@@ -392,13 +560,35 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
           }
         }
 
-        return false;
+        // Continue to final validation check (don't return false here)
       }
 
-      setIsValidationBlocking(false);
-      addLog('✅ Order validation passed - All critical fields are set', 'success');
-      console.log('[SwiftMonitor] ✅ Validation passed - all critical fields (OES, Coordinator, OrderType, Contacts) are set');
-      return true;
+      // Final validation check after all auto-fixes
+      addLog('🔍 Performing final validation check...', 'info');
+      
+      const finalValidation = await swiftApiService.validateOrderPackage(
+        orderNumber,
+        result.data,
+        contactsResult.success ? contactsResult.data : undefined
+      );
+      
+      setValidationResult(finalValidation);
+
+      // Check if ALL prechecks pass (OrderType, Coordinator, OES, PSP Dates, Documents, Contacts)
+      if (finalValidation.isValid) {
+        setIsValidationBlocking(false);
+        addLog('✅ Order validation passed - All prechecks complete!', 'success');
+        addLog('   ✓ OrderType, Coordinator, OES, PSP Dates, Documents, Contacts', 'success');
+        console.log('[SwiftMonitor] ✅ All prechecks passed - ready to process tasks');
+        return true;
+      } else {
+        // Some prechecks still failing
+        const stillMissing = finalValidation.missingFields.join(', ');
+        addLog(`⚠️ Validation incomplete - Missing: ${stillMissing}`, 'warning');
+        addLog('💡 Please fix missing fields manually in Swift UI', 'info');
+        setIsValidationBlocking(true);
+        return false;
+      }
     } catch (error: any) {
       console.error('[SwiftMonitor] Error during validation:', error);
       addLog(`❌ Error during validation: ${error.message}`, 'error');
@@ -418,9 +608,15 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
       
       // Check if order is completed
       const isCompleted = swiftApiService.isOrderCompleted(result.data);
-      if (isCompleted) {
+      
+      // Log the status for debugging
+      const status = result.data[0]?.status || 'Unknown';
+      console.log(`[SwiftMonitor] Order status: ${status}, isCompleted: ${isCompleted}`);
+      
+      if (isCompleted && !isOrderCompleted) {
         setIsOrderCompleted(true);
-        addLog('✅ Order status is "Ordered" - Order sent to downstream system', 'success');
+        addLog('🎉 Order status changed to "Ordered" - Order sent to downstream system!', 'success');
+        addLog('✅ Swift Monitor will stop processing - No more Swift tasks expected', 'success');
       }
       
       return result.data;
@@ -428,7 +624,7 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
       console.error('Failed to fetch product package:', result.error);
       return null;
     }
-  }, [orderNumber, addLog]);
+  }, [orderNumber, addLog, isOrderCompleted]);
 
   // Fetch tasks
   const fetchTasks = useCallback(async () => {
@@ -494,6 +690,12 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
   // Process ready tasks
   const processReadyTasks = useCallback(async () => {
     if (isProcessing || isOrderCompleted) {
+      return;
+    }
+
+    // Check if order is already completed (status = "Ordered")
+    if (isOrderCompleted) {
+      addLog('✅ Order is complete - No more tasks to process', 'success');
       return;
     }
 
@@ -657,6 +859,24 @@ const SwiftMonitor: React.FC<SwiftMonitorProps> = ({ orderNumber, environment, i
 
   return (
     <div className="space-y-4">
+      {/* Order Completed Banner */}
+      {isOrderCompleted && (
+        <div className="bg-gradient-to-r from-green-600 to-green-700 rounded-lg shadow-lg p-4 text-white border-2 border-green-400">
+          <div className="flex items-center gap-3">
+            <svg className="h-8 w-8 text-green-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <h3 className="text-lg font-bold">🎉 Order Complete!</h3>
+              <p className="text-sm text-green-100">
+                Order status: <strong>"Ordered"</strong> - Order has been sent to downstream systems. 
+                Swift Monitor has stopped processing.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-lg shadow-lg p-4 text-white">
         <div className="flex items-start justify-between">

@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Swift Document Checker - AVIATOR</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 900px;
+      margin: 50px auto;
+      padding: 20px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 10px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    h1 {
+      color: #333;
+      margin-top: 0;
+      border-bottom: 3px solid #667eea;
+      padding-bottom: 15px;
+    }
+    h2 {
+      color: #555;
+      margin-top: 30px;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 10px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 600;
+    }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 12px 30px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      margin-right: 10px;
+      margin-top: 10px;
+      transition: transform 0.2s;
+    }
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+    button:active {
+      transform: translateY(0);
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      background: #f8f9fa;
+      border-left: 4px solid #667eea;
+    }
+    .success {
+      background: #d4edda;
+      border-left-color: #28a745;
+      color: #155724;
+    }
+    .error {
+      background: #f8d7da;
+      border-left-color: #dc3545;
+      color: #721c24;
+    }
+    .warning {
+      background: #fff3cd;
+      border-left-color: #ffc107;
+      color: #856404;
+    }
+    .info {
+      background: #d1ecf1;
+      border-left-color: #17a2b8;
+      color: #0c5460;
+    }
+    .doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+    .doc-table th,
+    .doc-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    .doc-table th {
+      background: #667eea;
+      color: white;
+      font-weight: 600;
+    }
+    .doc-table tr:hover {
+      background: #f5f5f5;
+    }
+    .badge {
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .badge-success {
+      background: #28a745;
+      color: white;
+    }
+    .badge-danger {
+      background: #dc3545;
+      color: white;
+    }
+    .code {
+      background: #f4f4f4;
+      padding: 3px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+    }
+    .workflow-info {
+      background: #e7f3ff;
+      padding: 15px;
+      border-radius: 5px;
+      border-left: 4px solid #2196F3;
+      margin-bottom: 25px;
+    }
+    .step-badge {
+      display: inline-block;
+      background: #2196F3;
+      color: white;
+      padding: 5px 12px;
+      border-radius: 15px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📄 Swift Document Checker</h1>
+    
+    <div class="workflow-info">
+      <div class="step-badge">STEP 4 - Document Validation</div>
+      <p style="margin: 10px 0 5px 0;">
+        <strong>Workflow:</strong> 
+        <a href="test-create-order.html">1️⃣ Create Order</a> → 
+        <a href="test-save-order-package.html">2️⃣ Save Order</a> → 
+        <a href="test-set-psp-dates.html">3️⃣ Set PSP Dates</a> → 
+        <strong>4️⃣ Check Documents</strong> → 
+        5️⃣ Add Documents → 
+        <a href="test-add-product-package.html">6️⃣ Add Products</a>
+      </p>
+      <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">
+        This page checks if required documents (like SOF - Service Order Form) are attached to your order.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label for="environment">Swift Environment:</label>
+      <select id="environment">
+        <option value="Test 1">Test 1 (swiftenv1)</option>
+        <option value="Test 2">Test 2 (swiftenv2)</option>
+        <option value="Test 4">Test 4 (swiftenv4)</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="orderId">Order ID:</label>
+      <input type="text" id="orderId" placeholder="e.g., 556181595">
+    </div>
+
+    <button onclick="checkCurrentDocuments()">📋 Check Current Documents</button>
+    <button onclick="checkRequiredDocuments()">📝 Check Required Documents</button>
+    <button onclick="validateDocuments()">✅ Validate All Documents</button>
+
+    <h2>📤 Upload Document</h2>
+    <div class="form-group">
+      <label for="documentFile">Select Document (PDF):</label>
+      <input type="file" id="documentFile" accept=".pdf" style="padding: 8px;">
+    </div>
+
+    <div class="form-group">
+      <label for="documentType">Document Type:</label>
+      <select id="documentType">
+        <option value="SOF">SOF - Service Order Form</option>
+        <option value="Workbook/Order Form">Workbook/Order Form</option>
+        <option value="iSE Link">iSE Design</option>
+        <option value="TASC">TASC</option>
+        <option value="Quote">Quote</option>
+        <option value="MSA">Master Service Agreement</option>
+        <option value="OTHER">Other</option>
+      </select>
+    </div>
+
+    <button onclick="uploadDocument()">📤 Upload Document</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    // Auto-fill from sessionStorage if coming from previous step
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const orderIdFromUrl = urlParams.get('orderId');
+      const envFromUrl = urlParams.get('env');
+      
+      if (orderIdFromUrl) {
+        document.getElementById('orderId').value = orderIdFromUrl;
+      }
+      
+      if (envFromUrl) {
+        document.getElementById('environment').value = envFromUrl;
+      }
+      
+      // Also check sessionStorage
+      const savedOrderData = sessionStorage.getItem('aviator_order_data');
+      if (savedOrderData && !orderIdFromUrl) {
+        try {
+          const orderData = JSON.parse(savedOrderData);
+          if (orderData.orderId) {
+            document.getElementById('orderId').value = orderData.orderId;
+          }
+          if (orderData.environment) {
+            document.getElementById('environment').value = orderData.environment;
+          }
+        } catch (e) {
+          console.error('Error parsing session storage:', e);
+        }
+      }
+    });
+
+    function showResult(message, type = 'info') {
+      const resultDiv = document.getElementById('result');
+      resultDiv.className = `result ${type}`;
+      resultDiv.innerHTML = message;
+      resultDiv.style.display = 'block';
+    }
+
+    async function checkCurrentDocuments() {
+      const orderId = document.getElementById('orderId').value.trim();
+      const environment = document.getElementById('environment').value;
+
+      if (!orderId) {
+        showResult('⚠️ Please enter an Order ID', 'warning');
+        return;
+      }
+
+      showResult('🔍 Checking current documents...', 'info');
+
+      try {
+        // First, fetch the order data
+        const orderResponse = await fetch(`/api/swift/orderpackage/${orderId}?env=${encodeURIComponent(environment)}`);
+        const orderResult = await orderResponse.json();
+
+        if (!orderResult.success) {
+          showResult(`❌ Error loading order: ${orderResult.error}`, 'error');
+          return;
+        }
+
+        const orderPackageData = orderResult.data;
+
+        // Now check documents
+        const response = await fetch(`/api/swift/load-documents/${orderId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            environment: environment,
+            orderPackageData: orderPackageData
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          const hasDocuments = result.hasDocuments || false;
+          const documentCount = result.documentCount || 0;
+          const documents = result.data || [];
+
+          let html = `<h2>${hasDocuments ? '✅' : '⚠️'} Current Documents</h2>`;
+          html += `<p><strong>Document Count:</strong> ${documentCount}</p>`;
+
+          if (documentCount > 0) {
+            html += `<table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Document Type</th>
+                  <th>Document Name</th>
+                  <th>Attached By</th>
+                  <th>Attached Date</th>
+                </tr>
+              </thead>
+              <tbody>`;
+            
+            documents.forEach(doc => {
+              html += `<tr>
+                <td><span class="code">${doc.DocumentType || 'N/A'}</span></td>
+                <td>${doc.DocumentName || 'Unnamed Document'}</td>
+                <td>${doc.AttachedBy || 'Unknown'}</td>
+                <td>${doc.AttachedDate || 'N/A'}</td>
+              </tr>`;
+            });
+            
+            html += `</tbody></table>`;
+            showResult(html, 'success');
+          } else {
+            showResult(html + '<p>ℹ️ No documents currently attached to this order.</p>', 'warning');
+          }
+        } else {
+          showResult(`❌ Error: ${result.error}`, 'error');
+        }
+      } catch (error) {
+        showResult(`❌ Error checking documents: ${error.message}`, 'error');
+      }
+    }
+
+    async function checkRequiredDocuments() {
+      const orderId = document.getElementById('orderId').value.trim();
+      const environment = document.getElementById('environment').value;
+
+      if (!orderId) {
+        showResult('⚠️ Please enter an Order ID', 'warning');
+        return;
+      }
+
+      showResult('🔍 Checking required documents...', 'info');
+
+      try {
+        // First, fetch the order data
+        const orderResponse = await fetch(`/api/swift/orderpackage/${orderId}?env=${encodeURIComponent(environment)}`);
+        const orderResult = await orderResponse.json();
+
+        if (!orderResult.success) {
+          showResult(`❌ Error loading order: ${orderResult.error}`, 'error');
+          return;
+        }
+
+        const orderPackageData = orderResult.data;
+
+        // Now check required documents
+        const response = await fetch(`/api/swift/load-required-documents/${orderId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            environment: environment,
+            orderPackageData: orderPackageData,
+            taskData: null // Optional - can pass task data if available
+          })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+          const requiredCount = result.requiredCount || 0;
+          const documentTypes = result.documentTypes || [];
+
+          let html = `<h2>📝 Required Documents</h2>`;
+          html += `<p><strong>Required Count:</strong> ${requiredCount}</p>`;
+
+          if (requiredCount > 0) {
+            html += `<table class="doc-table">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Document Name</th>
+                  <th>Group</th>
+                  <th>Status</th>
+                  <th>Legal Review</th>
+                </tr>
+              </thead>
+              <tbody>`;
+            
+            documentTypes.forEach(doc => {
+              const attached = doc.attached || false;
+              const statusBadge = attached 
+                ? '<span class="badge badge-success">✓ Attached</span>'
+                : '<span class="badge badge-danger">✗ Missing</span>';
+              
+              html += `<tr>
+                <td><span class="code">${doc.type || 'N/A'}</span></td>
+                <td>${doc.name || 'Unknown'}</td>
+                <td>${doc.group || 'N/A'}</td>
+                <td>${statusBadge}</td>
+                <td>${doc.legalReview ? '⚖️ Yes' : 'No'}</td>
+              </tr>`;
+            });
+            
+            html += `</tbody></table>`;
+            
+            const allAttached = documentTypes.every(d => d.attached);
+            if (allAttached) {
+              html += '<p style="color: green; font-weight: 600; margin-top: 15px;">✅ All required documents are attached!</p>';
+              showResult(html, 'success');
+            } else {
+              const missingDocs = documentTypes.filter(d => !d.attached).map(d => d.name).join(', ');
+              html += `<p style="color: #856404; font-weight: 600; margin-top: 15px;">⚠️ Missing documents: ${missingDocs}</p>`;
+              showResult(html, 'warning');
+            }
+          } else {
+            showResult(html + '<p>ℹ️ No documents required for this order type.</p>', 'info');
+          }
+        } else {
+          showResult(`❌ Error: ${result.error}`, 'error');
+        }
+      } catch (error) {
+        showResult(`❌ Error checking required documents: ${error.message}`, 'error');
+      }
+    }
+
+    async function validateDocuments() {
+      const orderId = document.getElementById('orderId').value.trim();
+      const environment = document.getElementById('environment').value;
+
+      if (!orderId) {
+        showResult('⚠️ Please enter an Order ID', 'warning');
+        return;
+      }
+
+      showResult('🔍 Validating documents...', 'info');
+
+      try {
+        // First, fetch the order data
+        const orderResponse = await fetch(`/api/swift/orderpackage/${orderId}?env=${encodeURIComponent(environment)}`);
+        const orderResult = await orderResponse.json();
+
+        if (!orderResult.success) {
+          showResult(`❌ Error loading order: ${orderResult.error}`, 'error');
+          return;
+        }
+
+        const orderPackageData = orderResult.data;
+
+        // Check both current and required documents
+        const [currentResponse, requiredResponse] = await Promise.all([
+          fetch(`/api/swift/load-documents/${orderId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment, orderPackageData })
+          }),
+          fetch(`/api/swift/load-required-documents/${orderId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ environment, orderPackageData, taskData: null })
+          })
+        ]);
+
+        const currentResult = await currentResponse.json();
+        const requiredResult = await requiredResponse.json();
+
+        if (!currentResult.success || !requiredResult.success) {
+          showResult(`❌ Validation failed: ${currentResult.error || requiredResult.error}`, 'error');
+          return;
+        }
+
+        const documentCount = currentResult.documentCount || 0;
+        const requiredCount = requiredResult.requiredCount || 0;
+        const documentTypes = requiredResult.documentTypes || [];
+        
+        const allAttached = documentTypes.every(d => d.attached);
+        const missingCount = documentTypes.filter(d => !d.attached).length;
+
+        let html = `<h2>✅ Document Validation Report</h2>`;
+        html += `<p><strong>Order ID:</strong> <span class="code">${orderId}</span></p>`;
+        html += `<p><strong>Environment:</strong> ${environment}</p>`;
+        html += `<p><strong>Documents Attached:</strong> ${documentCount}</p>`;
+        html += `<p><strong>Documents Required:</strong> ${requiredCount}</p>`;
+        html += `<p><strong>Missing Documents:</strong> ${missingCount}</p>`;
+
+        if (requiredCount > 0) {
+          html += `<table class="doc-table" style="margin-top: 20px;">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Document Name</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>`;
+          
+          documentTypes.forEach(doc => {
+            const attached = doc.attached || false;
+            const statusBadge = attached 
+              ? '<span class="badge badge-success">✓ Attached</span>'
+              : '<span class="badge badge-danger">✗ Missing</span>';
+            
+            html += `<tr>
+              <td><span class="code">${doc.type || 'N/A'}</span></td>
+              <td>${doc.name || 'Unknown'}</td>
+              <td>${statusBadge}</td>
+            </tr>`;
+          });
+          
+          html += `</tbody></table>`;
+        }
+
+        if (allAttached && requiredCount > 0) {
+          html += '<div style="margin-top: 20px; padding: 15px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 5px;">';
+          html += '<p style="margin: 0; color: #155724; font-weight: 600;">✅ All required documents are attached! Order is ready to proceed.</p>';
+          html += '</div>';
+          showResult(html, 'success');
+        } else if (requiredCount === 0) {
+          html += '<div style="margin-top: 20px; padding: 15px; background: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 5px;">';
+          html += '<p style="margin: 0; color: #0c5460; font-weight: 600;">ℹ️ No documents required for this order type.</p>';
+          html += '</div>';
+          showResult(html, 'info');
+        } else {
+          const missingDocs = documentTypes.filter(d => !d.attached).map(d => d.name).join(', ');
+          html += '<div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 5px;">';
+          html += `<p style="margin: 0 0 10px 0; color: #856404; font-weight: 600;">⚠️ Missing ${missingCount} document(s):</p>`;
+          html += `<p style="margin: 0; color: #856404;">${missingDocs}</p>`;
+          html += '<p style="margin: 10px 0 0 0; color: #856404; font-size: 13px;">Please attach required documents before proceeding.</p>';
+          html += '</div>';
+          showResult(html, 'warning');
+        }
+      } catch (error) {
+        showResult(`❌ Error validating documents: ${error.message}`, 'error');
+      }
+    }
+
+    async function uploadDocument() {
+      const orderId = document.getElementById('orderId').value.trim();
+      const environment = document.getElementById('environment').value;
+      const fileInput = document.getElementById('documentFile');
+      const documentType = document.getElementById('documentType').value;
+
+      if (!orderId) {
+        showResult('⚠️ Please enter an Order ID', 'warning');
+        return;
+      }
+
+      if (!fileInput.files || fileInput.files.length === 0) {
+        showResult('⚠️ Please select a PDF file to upload', 'warning');
+        return;
+      }
+
+      const file = fileInput.files[0];
+      
+      if (!file.name.toLowerCase().endsWith('.pdf')) {
+        showResult('⚠️ Please select a PDF file', 'warning');
+        return;
+      }
+
+      showResult(`🔄 Uploading ${file.name}...`, 'info');
+
+      try {
+        // Step 1: Get order details to extract customerId and businessOrderId
+        const orderResponse = await fetch(`/api/swift/orderpackage/${orderId}?env=${encodeURIComponent(environment)}`);
+        const orderResult = await orderResponse.json();
+
+        if (!orderResult.success) {
+          showResult(`❌ Error loading order: ${orderResult.error}`, 'error');
+          return;
+        }
+
+        const orderPackageData = orderResult.data;
+        const customerId = orderPackageData.OrderDetail.CustomerId;
+        const businessOrderId = orderPackageData.OrderDetail.BusinessOrderId;
+
+        // Step 2: Upload the file
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('customerId', customerId.toString());
+        formData.append('businessOrderId', businessOrderId.toString());
+        formData.append('environment', environment);
+
+        const uploadResponse = await fetch(`/api/swift/upload-document/${orderId}`, {
+          method: 'POST',
+          body: formData
+        });
+
+        const uploadResult = await uploadResponse.json();
+
+        if (!uploadResult.success) {
+          showResult(`❌ Upload failed: ${uploadResult.error}`, 'error');
+          return;
+        }
+
+        showResult(`✅ Step 1/3: File uploaded successfully (${uploadResult.fileName})`, 'success');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Step 3: Get the document ID
+        const docsResponse = await fetch(`/api/swift/load-documents/${orderId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ environment, orderPackageData })
+        });
+
+        const docsResult = await docsResponse.json();
+
+        if (!docsResult.success) {
+          showResult(`❌ Failed to retrieve document ID: ${docsResult.error}`, 'error');
+          return;
+        }
+
+        // Find the uploaded document
+        const uploadedDoc = docsResult.data.find(doc => doc.FileName === file.name);
+
+        if (!uploadedDoc) {
+          showResult(`❌ Uploaded document not found in order`, 'error');
+          return;
+        }
+
+        showResult(`✅ Step 2/3: Document ID retrieved: ${uploadedDoc.DocumentId}`, 'success');
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Step 4: Set the document type
+        const updateTypeResponse = await fetch(`/api/swift/update-document-type/${orderId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            environment,
+            document: uploadedDoc,
+            documentTypes: [documentType]
+          })
+        });
+
+        const updateTypeResult = await updateTypeResponse.json();
+
+        if (!updateTypeResult.success) {
+          showResult(`❌ Failed to set document type: ${updateTypeResult.error}`, 'error');
+          return;
+        }
+
+        let html = `<h2>🎉 Document Upload Complete!</h2>`;
+        html += `<p><strong>File:</strong> ${file.name}</p>`;
+        html += `<p><strong>Document ID:</strong> <span class="code">${uploadedDoc.DocumentId}</span></p>`;
+        html += `<p><strong>Document Type:</strong> <span class="code">${documentType}</span></p>`;
+        html += `<p><strong>Size:</strong> ${(file.size / 1024).toFixed(2)} KB</p>`;
+        html += '<div style="margin-top: 20px; padding: 15px; background: #d4edda; border-left: 4px solid #28a745; border-radius: 5px;">';
+        html += '<p style="margin: 0; color: #155724; font-weight: 600;">✅ Document successfully uploaded and categorized!</p>';
+        html += '</div>';
+        html += '<p style="margin-top: 15px;">Click "Check Current Documents" or "Validate All Documents" to verify.</p>';
+
+        showResult(html, 'success');
+
+        // Clear the file input
+        fileInput.value = '';
+
+      } catch (error) {
+        showResult(`❌ Error uploading document: ${error.message}`, 'error');
+      }
+    }
+  </script>
+</body>
+</html>

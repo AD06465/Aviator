@@ -26,11 +26,12 @@ export async function POST(
       businessOrderId,
       customerId,
       customerNumber,
-      environment = 'Test 1',
-      orderType = "Install",
-      selectedOES = "AD06465",
-      selectedCoordinator = "AD06465",
-      selectedNAE = "AB81208"
+      environment = 'Test 1',  // Only keep default for environment
+      orderType,               // ✅ NO default - only set if provided
+      selectedOES,             // ✅ NO default - only set if provided
+      selectedCoordinator,     // ✅ NO default - only set if provided
+      selectedNAE,             // ✅ NO default - only set if provided
+      existingOrderData        // NEW: Pass existing order data to preserve PSPs
     } = body;
 
     // Get environment-specific base URL
@@ -57,156 +58,47 @@ export async function POST(
       }, { status: 500 });
     }
 
-    // Build the complete payload
+    // CRITICAL: Use existing OrderDetail with original timestamps to avoid version conflicts
+    // Swift's optimistic locking requires exact timestamps - we only override specific fields
+    const existingOrderDetail = existingOrderData?.OrderDetail || {};
+    const existingProductPackages = existingOrderData?.ProductPackages || [];
+    
+    console.log(`[Swift SaveOrderPackage] Using existing OrderDetail with original timestamps`);
+    console.log(`[Swift SaveOrderPackage] Original ModifiedDate: ${existingOrderDetail.ModifiedDate}`);
+    console.log(`[Swift SaveOrderPackage] Preserving ${existingProductPackages.length} existing PSPs to prevent workflow restart`);
+    
+    if (existingProductPackages.length > 0) {
+      console.log(`[Swift SaveOrderPackage] PSP IDs:`, existingProductPackages.map((p: any) => p.ProductPackageId).join(', '));
+    }
+
+    // Build payload using complete existing OrderDetail
+    // CRITICAL: Only override fields that were explicitly provided to avoid triggering updates on unchanged fields
+    const orderDetailOverrides: any = {
+      ...existingOrderDetail,
+      IsDetailUpdated: true,
+    };
+
+    // Conditionally add fields ONLY if they were provided in the request
+    if (orderType !== undefined) {
+      orderDetailOverrides.OrderType = orderType;
+      console.log(`[Swift SaveOrderPackage] Updating OrderType to: ${orderType}`);
+    }
+    if (selectedCoordinator !== undefined) {
+      orderDetailOverrides.SelectedCoordinator = selectedCoordinator;
+      console.log(`[Swift SaveOrderPackage] Updating Coordinator to: ${selectedCoordinator}`);
+    }
+    if (selectedOES !== undefined) {
+      orderDetailOverrides.SelectedOES = selectedOES;
+      console.log(`[Swift SaveOrderPackage] Updating OES to: ${selectedOES}`);
+    }
+    if (selectedNAE !== undefined) {
+      orderDetailOverrides.SelectedNAE = selectedNAE;
+      console.log(`[Swift SaveOrderPackage] Updating NAE to: ${selectedNAE}`);
+    }
+
     const payload = {
-      orderPackageDetail: {
-        IsDetailUpdated: true,
-        TransactionId: transactionId,
-        LegacyWorkflowHistoryId: null,
-        WorkflowId: workflowId,
-        DueDate: null,
-        DueDateTimeZone: null,
-        ModifiedBy: null,
-        ModifiedDate: "0001-01-01T00:00:00",
-        CreatedBy: username,
-        CreatedDate: new Date().toISOString(),
-        IPJustificationRequired: false,
-        SalesTeam: "Blue",
-        RevenueCity: null,
-        Source: "Swift",
-        MacdGMApprove: false,
-        MacdGM: null,
-        CreatedInternal: true,
-        ContainsInstallProducts: false,
-        ContainsRenewalProducts: false,
-        SendTaskToOnNet: false,
-        OriginatingGroup: "Care",
-        OrderPackageWorkflowID: null,
-        IsOpLegacyMacdOnly: true,
-        LegacyOpHasRsiProducts: true,
-        BusinessOrderId: businessOrderId,
-        HasLegacyOecProducts: false,
-        IsCspCustomerExecutedMsa: false,
-        SalesOffice: "Albany, NY",
-        Status: "New",
-        MaxRestartStatus: "Unknown",
-        CreditApprovalId: null,
-        DisconnectReasonId: null,
-        IsLegacyPackage: false,
-        OrderInitiator: "SWIFT_API",
-        NAE_ADNAME: null,
-        OrderInitiatorDisplay: "API, SWIFT",
-        OrderType: orderType,
-        OrderingGroup: "Install",
-        ServiceCenter: "Order Entry",
-        PrimaryAE: null,
-        SelectedCoordinator: selectedCoordinator,
-        SelectedNAE: selectedNAE,
-        SelectedTAE: null,
-        SelectedOES: selectedOES,
-        SelectedVAE: null,
-        SelectedCPM: null,
-        SelectedGM: null,
-        SelectedSM: null,
-        SelectedTDE: null,
-        SelectedTDESecurity: null,
-        SelectedVSC: null,
-        SelectedCSR: null,
-        SelectedDirectoryListing: null,
-        SelectedSolutionManager: null,
-        SelectedSMDisplayName: null,
-        SelectedGMDisplayName: null,
-        AutoAssignOES: true,
-        CustomerId: customerId,
-        CustomerNumber: customerNumber,
-        CustomerInfo: {
-          CustomerName: "Level 3 Demo and Testing",
-          CustomerId: customerId,
-          CustomerNumber: customerNumber,
-          ServiceLevel: "Diamond",
-          SalesChannel: "Local",
-          Segment: "MASS MARKETS",
-          SubSegment: "MTU",
-          Address: "10475 PARK MEADOWS DR LITTLETON COLORADO 80124 5433 UNITED STATES",
-          DisplayAddress: null,
-          LobId: 522,
-          IsInternalCustomer: false,
-          BusinessUnit: "Business Support"
-        },
-        AccountExecutiveEditable: false,
-        AutoAssignOrderEntrySpecialistEditable: false,
-        BillingDateEditable: false,
-        CustomerProjectManagerEditable: false,
-        CSREditable: false,
-        DisconnectReasonEditable: false,
-        FacilityPortProductChangeEditable: false,
-        FacilityPortProductChangeVisible: false,
-        IPJustificationEditable: false,
-        IPJustificationVisible: false,
-        LegacyMacdEditable: false,
-        MacdGeneralManagerApprovalEditable: false,
-        NetworkAccountExecutiveEditable: false,
-        PortingAppliesEditable: false,
-        SetEditNddRebdDatesEditable: false,
-        SetEditNddRebdDatesVisible: false,
-        OECProductsEditable: false,
-        OrderCoordinatorEditable: false,
-        OrderEntrySpecialistEditable: false,
-        OrderTypeEditable: false,
-        SeoProductsEditable: false,
-        TaeEditable: false,
-        TdeEditable: false,
-        VscEditable: false,
-        DirectoryListingEditable: false,
-        SolutionManagerEditable: false,
-        CanCreateNewPspEditable: false,
-        CanCreateNewPspVisible: false,
-        CanAddPsp: false,
-        CommunicateWithBillingVisible: false,
-        CommunicateWithBillingEditable: false,
-        HasSeoProducts: true,
-        HasOecProducts: false,
-        HasOrderingSystemCpo: false,
-        SourceDisplayName: "SwIFT",
-        HasInventoryProducts: false,
-        HasLegacyMacd: true,
-        PortingApplies: false,
-        OrderTypeRoutes: null,
-        OecProductsTooltip: "",
-        SeoProductsTooltip: "",
-        CanCreateNewPsp: false,
-        CommunicateWithRsi: false,
-        CommunicateWithBilling: false,
-        CreatorGlobalRegion: "NA",
-        SeoType: "eProducts",
-        GCAApprovalStatus: "None",
-        GCACreditCheckId: null,
-        CspCustomerWithExecutedMsaVisible: false,
-        ChangeVersion: null,
-        PreDeployStatus: "None",
-        IsHwanGatekeeperOes: false,
-        SuppressCustomerNotification: false,
-        SuppressCustomerNotificationEditable: false,
-        AccountOpportunityOwner: null,
-        AccountOpportunityOwnerDisplay: null,
-        HasDigitalInformationCollection: false,
-        OrderTags: null,
-        SecureCompany: "LUMEN",
-        BundleExists: false,
-        GCAApprovalStatusDescription: "",
-        Session: null,
-        Version: null,
-        Environment: null,
-        CurrentCulture: null,
-        CurrentCultureUI: null,
-        CurrentCultureName: "",
-        CurrentCultureKendoMessage: null,
-        GlobalAjaxTimeout: 0,
-        ServerName: "USIDC2WVSWIFT1W",
-        LocalTimezone: 3,
-        LocalTimezoneDescription: "Mountain Standard Time"
-      },
-      productPackages: [],
+      orderPackageDetail: orderDetailOverrides,
+      productPackages: existingProductPackages, // PRESERVE existing PSPs to prevent workflow restart
       cancelRemovePsps: [],
       workFlowPspChangesForRestart: {
         IsWorkflowRestarting: false,

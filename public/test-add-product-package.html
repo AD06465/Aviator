@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Add Product Package API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #555;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .form-group-inline {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .form-group-inline > div {
+            flex: 1;
+        }
+        .id-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        .id-display h3 {
+            margin-top: 0;
+            color: #495057;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .id-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .id-item:last-child {
+            border-bottom: none;
+        }
+        .id-label {
+            color: #6c757d;
+            font-size: 13px;
+        }
+        .id-value {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #0066cc;
+            font-size: 13px;
+        }
+        button {
+            background: #0066cc;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #0052a3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .success {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #0066cc;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .note {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+        .note strong {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Test Add Product Package API</h1>
+        
+        <div class="note" style="background: #fff3cd; border: 2px solid #ffc107; padding: 20px;">
+            <strong style="color: #856404; font-size: 16px;">⚠️ IMPORTANT: Complete Workflow Required</strong>
+            <div style="margin-top: 10px; color: #856404;">
+                <strong>Before using this tool, you MUST complete these steps in order:</strong>
+                <ol style="margin: 10px 0; padding-left: 25px;">
+                    <li><strong>Step 1:</strong> Create Order Package → <a href="/test-create-order.html" style="color: #0066cc;">test-create-order.html</a></li>
+                    <li><strong>Step 2:</strong> Save Order Package → <a href="/test-save-order-package.html" style="color: #0066cc;">test-save-order-package.html</a></li>
+                    <li><strong>Step 3:</strong> Set PSP Dates → <a href="/test-set-psp-dates.html" style="color: #0066cc;">test-set-psp-dates.html</a></li>
+                    <li><strong>Step 4:</strong> Check Documents → <a href="/test-check-documents.html" style="color: #0066cc;">test-check-documents.html</a></li>
+                    <li><strong>Step 5:</strong> Add Documents → (Coming soon)</li>
+                    <li><strong>Step 6:</strong> Add Product Package → (YOU ARE HERE)</li>
+                </ol>
+                <div style="background: #fff; padding: 10px; border-radius: 4px; margin-top: 10px;">
+                    <strong>❌ Common Error:</strong> If you get "ORA-02291: parent key not found", complete all prerequisite steps first!
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group-inline">
+            <div>
+                <label for="orderNumber">Order Number (Transaction ID):</label>
+                <input type="number" id="orderNumber" placeholder="556181595" required>
+            </div>
+            <div>
+                <label for="environment">Environment:</label>
+                <select id="environment">
+                    <option value="Test 1">Test 1 (swiftenv1)</option>
+                    <option value="Test 2">Test 2 (swiftenv2)</option>
+                    <option value="Test 4">Test 4 (swiftenv4)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="id-display">
+            <h3>🔑 Generated Unique IDs (auto-generated on each request)</h3>
+            <div class="id-item">
+                <span class="id-label">Product Package ID:</span>
+                <span class="id-value" id="packageIdDisplay">-</span>
+            </div>
+            <div class="id-item">
+                <span class="id-label">Product Instance ID 1:</span>
+                <span class="id-value" id="instanceId1Display">-</span>
+            </div>
+            <div class="id-item">
+                <span class="id-label">Product Instance ID 2:</span>
+                <span class="id-value" id="instanceId2Display">-</span>
+            </div>
+        </div>
+
+        <button id="testBtn" onclick="testAddProductPackage()">
+            Add Product Package
+        </button>
+        <button class="secondary" onclick="generateNewIds()">
+            🔄 Generate New IDs
+        </button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Store the current generated IDs
+        let currentIds = {
+            packageId: 0,
+            instanceId1: 0,
+            instanceId2: 0
+        };
+
+        // Generate a random 9-digit number
+        function generateUniqueId() {
+            return Math.floor(100000000 + Math.random() * 900000000);
+        }
+
+        // Generate new IDs and update display
+        function generateNewIds() {
+            currentIds.packageId = generateUniqueId();
+            currentIds.instanceId1 = generateUniqueId();
+            currentIds.instanceId2 = generateUniqueId();
+            
+            document.getElementById('packageIdDisplay').textContent = currentIds.packageId;
+            document.getElementById('instanceId1Display').textContent = currentIds.instanceId1;
+            document.getElementById('instanceId2Display').textContent = currentIds.instanceId2;
+        }
+
+        // Initialize IDs on page load
+        generateNewIds();
+        
+        // Check if order number was passed in URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderParam = urlParams.get('order');
+        
+        if (orderParam) {
+            document.getElementById('orderNumber').value = orderParam;
+        }
+
+        async function testAddProductPackage() {
+            const btn = document.getElementById('testBtn');
+            const resultDiv = document.getElementById('result');
+            const orderNumber = document.getElementById('orderNumber').value;
+            const environment = document.getElementById('environment').value;
+
+            if (!orderNumber) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '❌ Please enter an order number (Transaction ID)';
+                return;
+            }
+
+            // Generate new IDs for this request
+            generateNewIds();
+
+            // Disable button and show loading
+            btn.disabled = true;
+            btn.innerHTML = 'Adding Product Package...<span class="loading"></span>';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = `⏳ Adding Fabric Port product package to order ${orderNumber}...\n\nGenerated IDs:\n` +
+                `  Product Package ID: ${currentIds.packageId}\n` +
+                `  Product Instance ID 1: ${currentIds.instanceId1}\n` +
+                `  Product Instance ID 2: ${currentIds.instanceId2}`;
+
+            const startTime = Date.now();
+
+            try {
+                const response = await fetch('http://localhost:3000/api/swift/add-product-package', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        orderNumber: parseInt(orderNumber),
+                        environment: environment,
+                        productPackageId: currentIds.packageId,
+                        productInstanceId1: currentIds.instanceId1,
+                        productInstanceId2: currentIds.instanceId2
+                    })
+                });
+
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    let output = `✅ Product Package Added Successfully!\n\n`;
+                    output += `⏱️ Time: ${elapsed}s\n\n`;
+                    output += `📦 Order Number: ${orderNumber}\n`;
+                    output += `🔧 Product: Fabric Port\n\n`;
+                    output += `Generated IDs Used:\n`;
+                    output += `  Product Package ID: ${currentIds.packageId}\n`;
+                    output += `  Product Instance ID 1: ${currentIds.instanceId1}\n`;
+                    output += `  Product Instance ID 2: ${currentIds.instanceId2}\n\n`;
+                    output += `Full Response:\n${JSON.stringify(data, null, 2)}`;
+                    resultDiv.textContent = output;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `❌ Error: HTTP ${response.status}\n\n${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                const elapsed = Math.round((Date.now() - startTime) / 1000);
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Request Failed (${elapsed}s)\n\nError: ${error.message}\n\nNote: Make sure the API endpoint is implemented at:\nhttp://localhost:3000/api/swift/add-product-package`;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Add Product Package';
+            }
+        }
+
+        // Allow Enter key in order number field
+        document.getElementById('orderNumber').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                testAddProductPackage();
+            }
+        });
+    </script>
+</body>
+</html>
